@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Build Your Own Translation"
+description = "A parchment-toned Hebrew Bible study prototype with interlinear Hebrew, manuscript witnesses, personal rendering choices, clean reading, and sample semantic search."
+version = "1.0.0"
+id = "artifacts/build-your-translation"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18119
+
+[services.development]
+run = "pnpm --filter @workspace/build-your-translation run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/build-your-translation", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/build-your-translation/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18119"
+BASE_PATH = "/"
