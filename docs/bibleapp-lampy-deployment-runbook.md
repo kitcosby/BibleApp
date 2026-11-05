@@ -16,25 +16,31 @@ claim that the API is already deployed.
 Do not expose PostgreSQL port 5432. Do not make the sandbox-token API
 publicly reachable. A tailnet-only route is acceptable for sandbox use.
 
-## Runtime choice
+## Runtime and host preparation
 
-Use a Linux Node.js LTS runtime installed inside the WSL `lampy` distro.
-This is preferred over using Windows Node from a WSL-managed Supervisor
-service: it keeps process lifecycle, filesystem paths, localhost networking,
-and service supervision in one OS environment.
+- Lampy is Ubuntu 22.04.5 LTS.
+- The Ubuntu repository candidate was Node 12, which is too old for this
+  workspace.
+- Node.js 24.22.1 LTS was installed under `/opt/node-v24.22.1-linux-x64`,
+  with `/opt/node` and `/usr/local/bin` symlinks. Its SHA-256 was checked
+  against the official Node.js release page before extraction.
+- Verified versions: Node 24.22.1, npm 11.19.1, Corepack 0.36.0.
+- Git and GitHub CLI were installed from the refreshed Ubuntu package
+  repositories. The WSL environment is not authenticated to GitHub.
+- A dedicated Ed25519 read-only deploy key was generated at
+  `/root/.ssh/bibleapp_deploy`. Its public half must be added to the
+  `kitcosby/BibleApp` repository as a read-only Deploy Key before cloning.
+  Keep the private half on Lampy; never paste or commit it.
 
-Before installing, record the current distro version and package source,
-choose a supported LTS release, and verify `node --version`,
-`npm --version`, and Corepack/pnpm. Do not replace or remove the Windows
-Node installation.
+Do not replace or remove the Windows Node installation.
 
 ## Application checkout and build
 
 Use a dedicated deployment directory, for example `/opt/bible-app-api`.
 Do not deploy into `/opt/bible`, which contains the legacy Flask app.
 
-- Fetch `feat/bible-app-legacy-db-adapter` from
-  `kitcosby/BibleApp`.
+- After the read-only deploy key is authorized, fetch
+  `feat/bible-app-legacy-db-adapter` from `kitcosby/BibleApp` over SSH.
 - Preserve the repository's `pnpm-lock.yaml`; use frozen-lockfile
   installation.
 - Build workspace project references with `tsc -b`, then build the API
@@ -84,19 +90,20 @@ reloading Apache. Do not restart the full Lampy stack.
 ## Verification gates
 
 1. Linux Node runtime is installed and version recorded.
-2. Workspace install/build succeeds from a clean checkout.
-3. API responds on `127.0.0.1:8799`; no listener is bound to
+2. Read-only GitHub deploy key is authorized and checkout is verified.
+3. Workspace install/build succeeds from a clean checkout.
+4. API responds on `127.0.0.1:8799`; no listener is bound to
    `0.0.0.0` or a public interface.
-4. The API health endpoint returns a database-connected result when called
+5. The API health endpoint returns a database-connected result when called
    with the sandbox token.
-5. Missing/incorrect token receives 403.
-6. Read endpoints return the expected two baseline translations.
-7. A controlled write/read-back/cleanup test passes and restores the
+6. Missing/incorrect token receives 403.
+7. Read endpoints return the expected two baseline translations.
+8. A controlled write/read-back/cleanup test passes and restores the
    original database snapshot.
-8. Apache configtest succeeds; only then reload Apache.
-9. The `/api/` path works through the intended tailnet ingress while
-   `/bible/` and `/app/` remain healthy.
-10. Supervisor reports the API program RUNNING and all pre-existing
+9. Apache configtest succeeds; only then reload Apache.
+10. The `/api/` path works through the intended tailnet ingress while
+    `/bible/` and `/app/` remain healthy.
+11. Supervisor reports the API program RUNNING and all pre-existing
     programs remain RUNNING.
 
 Capture command output and timestamps in a deployment log. Distinguish
