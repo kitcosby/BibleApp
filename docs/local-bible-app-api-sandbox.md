@@ -64,24 +64,24 @@ The API is **not yet installed as a supervised Lampy service**.
 
 Inspection of the live configuration found:
 
-- Supervisor currently has the eight existing services, but no BibleApp API
-  program entry.
-- Apache's current site config proxies `/app` to the forum and `/bible` to
-  the legacy Flask app; it has no `/api/` proxy.
-- Node is present on the Windows host, but no Node executable was found in
-  the WSL distro's `/usr/bin` or `/usr/local/bin` listings.
-- The existing API entrypoint listens on `127.0.0.1` and requires `PORT`.
+- Supervisor has the eight existing services but no BibleApp API entry.
+- Apache proxies `/app` to the forum and `/bible` to the legacy Flask app;
+  it has no `/api/` proxy.
+- Linux Node.js 24.22.1 LTS is now installed in WSL at `/opt/node`.
+  Node 24.22.1, npm 11.19.1, and Corepack 0.36.0 were verified.
+- Git and GitHub CLI are installed. A read-only deploy key has been
+  generated locally; repository authorization and checkout are pending.
+- The API entrypoint listens on `127.0.0.1` and requires `PORT`.
   The environment file reports `PORT=8799`.
 
-Recommended runtime decision: install a supported Linux Node.js LTS runtime
-inside the `lampy` distro and run the API there under Supervisor. This keeps
-the service lifecycle and localhost networking inside the same environment
-as Apache and PostgreSQL. Do not use the Windows Node executable as a
-long-running service managed from WSL.
+The Linux runtime decision is complete. The next blocker is authorizing
+the Lampy read-only deploy key on the private GitHub repository so the
+branch can be checked out and built on the machine.
 
 ## Deployment sequence
 
-1. Install and verify a supported Linux Node.js LTS release in WSL.
+1. Add the generated public deploy key to `kitcosby/BibleApp` as a
+   read-only Deploy Key.
 2. Check out this branch into a dedicated directory such as
    `/opt/bible-app-api`; do not place it under the legacy Flask app.
 3. Install the pinned workspace dependencies with the repository's pnpm
