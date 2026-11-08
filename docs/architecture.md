@@ -180,6 +180,28 @@ Observed in the monorepo source:
 - The API currently uses a sandbox-token gate, not production user authentication. Do not expose this service publicly until identity, per-user authorization, ownership enforcement, and security review are complete.
 - The Express API does **not** currently replace the Flask corpus API. Treating it as the only backend would omit the core read/search routes used by the existing PWA.
 
+
+### Additional legacy Flask application responsibilities
+
+Read-only inspection of /opt/bible/website/app_v2.py found that the /bible service is more than a read-only corpus API:
+
+- It serves legacy HTML Bible/interlinear/reading pages and routes for signup/login/logout, translation selection and creation, per-word choices, reading-position persistence, exports, and variant browsing.
+- It exposes the read-only JSON endpoints consumed by BibleApp-pwa: /api/books, /api/chapters/{book}, /api/verses/{book}/{chapter}, /api/verse/{book}/{chapter}/{verse}, /api/chapter/{book}/{chapter}, /api/word/{strongs}, and /api/search.
+- The JSON API currently sets Access-Control-Allow-Origin: * and returns public corpus data. The frontend's existing API fallback URLs all lead to this same Lampy service.
+- Search calls Ollama at 127.0.0.1:11434 using nomic-embed-text to embed the query, then performs vector similarity against the corpus database's ylt_verses_embedding_store. Therefore moving the Flask API and PostgreSQL data alone is insufficient: the query-embedding runtime/model must also move, or search must be redesigned and equivalence-tested.
+- The legacy Flask UI uses its own account/session flow backed by user_accounts and stores signed-in reading positions in reading_position. Its authoring operations use the shared translation, word_choice, other_option, and lemma_default tables in bible_app.
+- The newer Express API also reads/writes translation-authoring tables in bible_app. This means there are two active application surfaces touching overlapping authoring data. Any replacement or cutover must define one canonical write API, maintain compatibility during transition, and test concurrent update behavior. Do not remove legacy routes based on the existence of the Express API.
+
+### Identity and authoring ownership are not yet unified
+
+Three separate identity mechanisms are visible in the inspected source:
+
+1. Legacy Bible site: Flask sessions backed by bible_app.user_accounts.
+2. Forum: separate Flask sessions backed by forum.users.
+3. Express authoring/variant API: sandbox-token gate; no end-user identity/session integration in the inspected routes.
+
+No SSO or account-linking contract was found. The schema and code should not be treated as proof that a Bible site account and a forum account represent the same person. A production architecture must explicitly decide whether to link existing accounts, adopt an identity provider, or retain separate forum login. It must also enforce translation ownership server-side; a sandbox token is not an end-user authorization model.
+
 ### Portability acceptance tests
 
 A non-Lampy staging deployment is not portable until all of these pass with Lampy network access blocked, except for the deliberately excluded forum path:
