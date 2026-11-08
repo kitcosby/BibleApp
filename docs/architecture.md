@@ -127,6 +127,71 @@ The diagram describes the target, not the current deployment. The core API and i
 - Test forum integration separately against Lampy, including authentication and failure behavior.
 - Only after parity, integrity, backup/restore, and security checks should any production cutover be proposed.
 
+
+## Observed dependency inventory — 2026-11-08
+
+This inventory was checked against current GitHub source and read-only inspection of the Lampy WSL filesystem. It describes the present implementation, not the desired final deployment.
+
+### Live Lampy routing and services
+
+The active Apache site configuration contains these mappings:
+
+| Public path | Upstream | Application | Target classification |
+|---|---|---|---|
+| /app | 127.0.0.1:8000 | Custom Flask forum in /opt/forum | **Lampy-only exception** |
+| /bible | 127.0.0.1:5057 | Legacy Flask corpus API in /opt/bible/website/app_v2.py | Core; must become portable |
+| /api/ | 127.0.0.1:8799 | Express API in /opt/bible-app-api | Core; must become portable |
+
+The forum is not Discourse, phpBB, or Flarum. It is a custom Flask application. Its production run command is documented as Gunicorn bound to localhost port 8000. The /app reverse proxy strips the public prefix before forwarding to the application.
+
+### Forum capabilities and limits
+
+Observed in /opt/forum/app.py, schema.sql, and its templates:
+
+- Server-rendered Flask pages for category listing, category threads, thread detail, thread creation, registration, login/logout, metrics, search, and documentation pages/images.
+- PostgreSQL-backed users, categories, threads, posts, forum_events, Timescale continuous aggregate forum_daily, and docs.
+- A post belongs to a thread; a thread belongs to a category and author. **The inspected schema has no Bible book/chapter/verse or BibleApp entity foreign key.** Therefore the current forum data model does not itself provide per-verse comment threads.
+- Authentication is local to the forum: username/password hashes in users, Flask signed session cookie, and a CSRF token checked on POST. No shared BibleApp identity provider or SSO contract was found in the inspected code.
+- No JSON REST API, OAuth/OIDC endpoints, or explicit cross-application session handoff were found in the inspected app.py. Current operations are HTML pages and form submissions.
+- Forum registration and reply notifications use SMTP through the configured James mail service. Search currently falls back to PostgreSQL ILIKE; the vector-search function is a placeholder even when a vectorizer is detected.
+- Forum config contains credentials/secrets and was intentionally not read or copied into project documentation.
+
+**Implication:** the forum can remain an independently hosted Lampy application, but an embedded BibleApp comments experience requires a new integration surface and an explicit identity decision. A simple iframe or direct browser fetch is not a safe substitute for an authenticated API. A plain link to /app is the only presently evidenced integration behavior.
+
+### Existing BibleApp client dependencies
+
+| Client / package | Current dependency | What it consumes | Portability work |
+|---|---|---|---|
+| Existing PWA kitcosby/BibleApp-pwa | Static shell currently served from Lampy /byot/; read-only corpus API on Lampy | GET books, chapters, verses, verse, chapter, word, search; browser localStorage stores rendering and witness choices | Move static hosting to selected host; move/provision corpus API and data; replace hard-coded Lampy API fallback bases with configuration |
+| Vercel monorepo frontend artifacts/build-your-translation | Vite static build | Currently placeholder only; no Study/Read or forum integration | Implement actual core UI and API client; make API base configurable |
+| Express API artifacts/api-server | Lampy process on localhost 8799 | Health; translation authoring against bible_app; Hebrew variant reads against the isolated shadow DB | Package as host-neutral service; provision target DBs and environment; replace sandbox-token gate with reviewed user authentication before public release |
+| Flask corpus API /bible | Lampy process on localhost 5057 | Canonical corpus, verse/word payloads, search, alignments and variant witnesses | Port this service or replace it with a behavior-compatible implementation; migrate corpus and search data with provenance/integrity checks |
+| Flask forum /app | Lampy process on localhost 8000 | Forum users, categories, threads, posts, docs, events | Leave on Lampy; expose a deliberately designed integration contract only if comments are embedded in BibleApp |
+
+The PWA architecture document confirms its current API_BASES probe order includes the public Lampy Funnel, the Lampy tailnet URL, and same-host /bible. These all target the same Lampy corpus service. Moving only the static PWA files would therefore **not** make the app independent of Lampy.
+
+### Express API and database split
+
+Observed in the monorepo source:
+
+- GET /api/healthz is a process health route.
+- /api/bible/* translation-authoring routes use the legacy DATABASE_URL pool from lib/db and the pre-existing bible_app schema.
+- /api/lexicon/hebrew-vowel-variants/* uses a separate HEBREW_VARIANT_DATABASE_URL pool to the validated Hebrew-variant shadow database. It is read-only, max five connections, with bounded timeouts and read-only transaction defaults.
+- The API currently uses a sandbox-token gate, not production user authentication. Do not expose this service publicly until identity, per-user authorization, ownership enforcement, and security review are complete.
+- The Express API does **not** currently replace the Flask corpus API. Treating it as the only backend would omit the core read/search routes used by the existing PWA.
+
+### Portability acceptance tests
+
+A non-Lampy staging deployment is not portable until all of these pass with Lampy network access blocked, except for the deliberately excluded forum path:
+
+1. Load books, chapters, verses, verse details, word details, search results, morphology, translation phrases, and witness/variant data.
+2. Load Hebrew vowel-variant group and occurrence details from the target host's validated dataset.
+3. Read and persist translation-authoring choices with real user identity and ownership checks.
+4. Start, restart, back up, and restore the core services and databases using only documented host configuration.
+5. Confirm the frontend has no hard-coded Lampy hostnames, IPs, Funnel URLs, or Lampy-only fallback behavior for core requests.
+6. Disable Lampy/forum access and verify all core study and reading functions still work.
+7. Separately test the forum integration, including unauthenticated state, signed-in state, CSRF protection, session expiry, logout, and Lampy/forum outage behavior.
+
 ## API and database boundaries
 
 ### Express API
