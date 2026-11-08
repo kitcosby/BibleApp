@@ -19,7 +19,7 @@ As of this status date:
 - The Express API is separately operated on Lampy. It has a legacy `DATABASE_URL` pool for the `bible_app` authoring database and a separate `HEBREW_VARIANT_DATABASE_URL` pool for the isolated read-only Hebrew-variant shadow database.
 - The existing Bible corpus/API service and BibleApp PWA remain separate from this Vercel scaffold. The PWA already consumes Lampy-hosted services; the Vercel frontend has not yet been wired to replace or duplicate that working experience.
 
-**Architectural rule:** Vercel may host the browser application, but Lampy remains the authoritative host for corpus data and the existing backend services. Do not copy production corpus data or Lampy database credentials into Vercel.
+**Target architectural rule (confirmed by Kit, 2026-11-08):** BibleApp's core must be deployable on a web server other than Lampy, with its own portable application/API runtime and database dependencies. The forum/comment system is the deliberate exception: it remains on Lampy, and BibleApp integrates with it through a documented, replaceable forum adapter. Lampy must not remain a hidden dependency for Bible text, lexical data, morphology, alignments, variant lookups, or translation-authoring operations. Vercel is one possible frontend host, not an architectural requirement. Do not expose database credentials or backend secrets to browsers or frontend builds.
 
 ## Runtime and repository inventory
 
@@ -87,6 +87,45 @@ flowchart LR
 ```
 
 The dotted connection is deliberate: the frontend's current `App.tsx` is a placeholder and does not yet implement this integration.
+
+
+## Confirmed target: portable core with Lampy forum integration
+
+Kit clarified that “standalone” does **not** mean removing every Lampy dependency. The forum/comment section is tied to the existing forum and therefore continues to require Lampy. The rest of BibleApp must be host-portable.
+
+### Target service boundary
+
+```mermaid
+flowchart LR
+  BROWSER["Browser"] --> APP["BibleApp frontend"]
+  APP --> CORE["BibleApp core API on chosen web host"]
+  CORE --> APPDB[("Portable BibleApp application database")]
+  CORE --> CORPUS[("Portable corpus/lexical data store")]
+  APP -.->|"Forum adapter: authenticated HTTPS integration"| FORUMAPI["Lampy forum interface"]
+  FORUMAPI --> FORUMDB[("Existing forum data on Lampy")]
+```
+
+The diagram describes the target, not the current deployment. The core API and its data stores must be installable and operable on another web server without reaching Lampy. Only forum/comment features may depend on the Lampy forum interface.
+
+### Portability requirements
+
+1. **Core data independence:** Bible text, morphology, alignments, lexical data, variant data, search indexes, and translation-authoring data required by core features must be served from the chosen BibleApp host or its explicitly configured data services. A core Bible lookup must not silently proxy to Lampy.
+2. **Reproducible data provisioning:** Provide versioned schema migrations, reproducible corpus imports/snapshots, integrity checks, and documented backup/restore procedures. Preserve provenance and licensing for every source.
+3. **Configuration, not code forks:** Hostnames, database URLs, forum endpoint, and credentials must be environment-configured. No host-specific paths, Lampy IPs, or secrets embedded in frontend code.
+4. **Forum adapter:** Isolate forum operations behind a small server-side interface. The browser must not receive forum service secrets. Define supported operations, identity/session handoff, authorization, CORS/CSRF protections, error behavior, and graceful handling when Lampy/forum is unavailable. Do not assume the forum's API capabilities until inspected.
+5. **Degraded mode:** If Lampy is unavailable, Bible reading, study, lexical, variant, and translation features should continue. Only forum/comment functions should report unavailable.
+6. **Host-neutral deployment:** Document a deployment path for a conventional web server (reverse proxy, frontend assets, core API process, database, TLS, health checks, backups). Vercel may remain a frontend option, but the architecture must not depend on Vercel or Replit-specific services.
+7. **Migration safety:** Treat existing Lampy databases and corpus as source-of-truth until a migration plan is validated and explicitly approved. No database cutover, writes, destructive changes, or retirement of existing services are implied by this target decision.
+
+### Implementation sequence
+
+- Inventory every frontend/API request and classify it as core or forum.
+- Inspect the actual Lampy forum implementation and identify its supported integration mechanism; do not invent an endpoint or assume a plugin/API exists.
+- Define and test the forum adapter contract.
+- Make core API services and corpus data portable, with local/staging deployments that do not require Lampy.
+- Add a deployment profile for a non-Lampy host and prove core workflows while Lampy/forum access is blocked.
+- Test forum integration separately against Lampy, including authentication and failure behavior.
+- Only after parity, integrity, backup/restore, and security checks should any production cutover be proposed.
 
 ## API and database boundaries
 
