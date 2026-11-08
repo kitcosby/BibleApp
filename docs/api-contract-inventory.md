@@ -195,15 +195,18 @@ Therefore the planned canonical write API must be specified from actual legacy b
 
 The current reader client is in `kitcosby/BibleApp-pwa`, not in the Vercel monorepo's placeholder frontend. Its `main` branch `index.html` is a single-file static PWA with no build step or server code.
 
-### API base selection
+### API base selection — updated 2026-11-08
 
-The current `API_BASES` order in `index.html` is:
+PR #1 in `kitcosby/BibleApp-pwa` was merged as commit `997bfe3cd076ecdd86e99983c7170ac28ea4a89b`. The PWA now loads `config.js` before its inline application code and reads `window.BIBLEAPP_API_BASE`.
 
-1. `https://laptop.taila7a335.ts.net:8443/bible`
-2. `https://laptop.taila7a335.ts.net/bible`
-3. `/bible` (same-host relative path)
+- Current default: `/bible`, preserving the existing same-origin Lampy deployment.
+- Portable deployment: set the value in `config.js` to the chosen core API HTTPS origin/path, without a trailing slash.
+- The client now calls exactly one configured API base. The hard-coded Lampy Funnel/tailnet URLs and session-sticky probe/fallback list have been removed from application code.
+- If that configured API is unavailable, the existing labeled sample/offline behavior remains; the app does not silently fall back to Lampy.
+- Service worker shell cache is `byot-v17`; `config.js` is included and fetched network-first with cached fallback for offline use.
+- `config.js` must contain no credentials or secrets. Cross-origin hosting requires a deliberate API CORS policy.
 
-These are fallback addresses for the same Lampy Flask API, not independent portable backends. The client probes in order, keeps the last successful base for the session, memoizes successful JSON responses, and applies a cooldown after failures. A portable deployment must replace this hard-coded Lampy fallback list with a single explicitly configured core API base (or an equally explicit host configuration), not preserve the fallback chain as if it were high availability.
+This is a portability prerequisite, not a completed backend migration. The default configuration still targets the current Lampy `/bible` path, and no production deployment or cutover was performed.
 
 ### Client-requested endpoints
 
@@ -217,7 +220,7 @@ The PWA uses these GET routes:
 - `/api/word/:strongs`
 - `/api/search?q=:query`
 
-When mounted under the current `/bible` prefix, these resolve to the public `/bible/api/...` routes. This matches the Lampy Flask route inventory above.
+When mounted under the current default `/bible` prefix, these resolve to the public `/bible/api/...` routes. This matches the Lampy Flask route inventory above.
 
 ### Browser-side state and offline behavior
 
@@ -229,10 +232,8 @@ Therefore:
 - A future account-backed sync feature needs a deliberate import/export and conflict-resolution design; it must not silently overwrite either localStorage choices or existing `word_choice` records.
 - Offline cache behavior must remain explicit and must not disguise stale data as freshly synchronized server state.
 
-### Product boundary clarification
+### Product boundary decision
 
-There are currently two distinct frontend efforts:
-1. `BibleApp-pwa`: the functioning static Study/Read/Word/Search client, currently calling Lampy's Flask API.
-2. `BibleApp` monorepo's `artifacts/build-your-translation`: a separate Vite frontend scaffold whose current `App.tsx` is a placeholder.
+Use the existing `BibleApp-pwa` as the **initial portable frontend** because it already provides the functioning Study/Read/Word/Search experience. Keep `BibleApp` monorepo's Vite frontend as an experimental/scaffold track until it reaches functional parity; do not spend effort rebuilding the same reader UI there first.
 
-They must not be conflated in migration plans. Decide whether the existing PWA is the initial portable frontend, whether the Vite app will replace it, or whether both remain supported. No replacement or retirement decision has been made.
+The Vite app's current `App.tsx` remains a placeholder. This decision does not prevent a future replacement, but any replacement must demonstrate parity and migration of browser-local preferences before the PWA is retired.
