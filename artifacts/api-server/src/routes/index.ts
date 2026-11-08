@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import bibleRouter from "./bible";
+import hebrewVowelVariantsRouter from "./hebrew-vowel-variants";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -13,4 +14,5 @@ router.use("/bible", (req, res, next) => {
   next();
 });
 router.use(bibleRouter);
+router.use("/lexicon/hebrew-vowel-variants", hebrewVowelVariantsRouter);
 export default router;
