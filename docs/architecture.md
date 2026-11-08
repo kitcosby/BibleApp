@@ -337,3 +337,10 @@ The search implementation is deliberately deferred until the word-variant embedd
 5. Integrate the Lampy forum as link-first.
 6. Evaluate the new search dataset and specify search behavior, evaluation set, query embedding runtime, and API contract.
 7. Run non-Lampy staging acceptance tests, then prepare a separately approved migration/cutover plan.
+
+
+## API contract inventory
+
+The source-backed route inventory and authorization review is maintained in [`docs/api-contract-inventory.md`](./api-contract-inventory.md). It covers the Express API, the existing Lampy Flask corpus/API and legacy UI routes, authoring behavior, and the current identity/ownership gaps.
+
+A critical clarification from direct source inspection: the Express router applies the sandbox-token middleware to the entire `/api/bible/*` prefix, including GET translation list/detail routes and the nested authoring health route. The Hebrew vowel-variant router independently applies the same sandbox-token requirement. This shared token is not end-user identity, and the inspected translation handlers do not enforce owner authorization. The legacy Flask authoring surface also has an ownership gap: `current_translation()` selects by translation ID without checking the signed-in user's authorization. These write surfaces must remain non-public until a canonical identity and ownership model is implemented and tested.
