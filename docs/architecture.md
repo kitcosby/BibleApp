@@ -344,3 +344,10 @@ The search implementation is deliberately deferred until the word-variant embedd
 The source-backed route inventory and authorization review is maintained in [`docs/api-contract-inventory.md`](./api-contract-inventory.md). It covers the Express API, the existing Lampy Flask corpus/API and legacy UI routes, authoring behavior, and the current identity/ownership gaps.
 
 A critical clarification from direct source inspection: the Express router applies the sandbox-token middleware to the entire `/api/bible/*` prefix, including GET translation list/detail routes and the nested authoring health route. The Hebrew vowel-variant router independently applies the same sandbox-token requirement. This shared token is not end-user identity, and the inspected translation handlers do not enforce owner authorization. The legacy Flask authoring surface also has an ownership gap: `current_translation()` selects by translation ID without checking the signed-in user's authorization. These write surfaces must remain non-public until a canonical identity and ownership model is implemented and tested.
+
+
+## Current portable frontend decision — 2026-11-08
+
+The existing `kitcosby/BibleApp-pwa` is the initial portable frontend because it already contains the working Study, Read, Word, and Search experience. The Vite frontend in this monorepo remains a scaffold/experimental track until it reaches functional parity; do not rebuild the existing reader there as the first migration step.
+
+The PWA's API base is now deployment-configurable through its `config.js` (`window.BIBLEAPP_API_BASE`), defaulting to `/bible` to preserve current behavior. The hard-coded Lampy Funnel/tailnet fallback URLs have been removed. This only decouples the client from Lampy-specific hostnames; the default still reaches the Lampy Flask backend. The portable core API and data services have not yet been moved or deployed.
