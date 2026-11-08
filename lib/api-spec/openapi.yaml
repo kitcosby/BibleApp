@@ -1,6 +1,5 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
   description: API specification
@@ -10,6 +9,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: lexicon
+    description: Read-only Hebrew and Aramaic vowel-only orthographic variant lookup
 paths:
   /healthz:
     get:
@@ -24,13 +25,232 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /lexicon/hebrew-vowel-variants/by-word/{wordId}:
+    get:
+      operationId: getHebrewVowelVariantByWord
+      tags: [lexicon]
+      summary: Resolve a source word to its related pointed-form group
+      description: Returns the candidate orthographic group for a source word, or a null group when it has no membership. The relation does not adjudicate lexical identity or meaning.
+      security:
+        - SandboxToken: []
+      parameters:
+        - name: wordId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Group lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ByWordResponse"
+        "400": { description: Invalid word identifier, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "403": { description: Sandbox authorization required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Source word not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "503": { description: Shadow snapshot unavailable or failed validation, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "500": { description: Unexpected request failure, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /lexicon/hebrew-vowel-variants/{variantGroupId}:
+    get:
+      operationId: getHebrewVowelVariantGroup
+      tags: [lexicon]
+      summary: Read a related pointed-form group
+      description: Returns exact stored pointed forms and their existing lexical assignments. The relation is orthographic only; it does not establish lexical identity, synonymy, or semantic equivalence.
+      security:
+        - SandboxToken: []
+      parameters:
+        - name: variantGroupId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Candidate group and members
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VariantGroupResponse"
+        "400": { description: Invalid group identifier, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "403": { description: Sandbox authorization required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Group not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "503": { description: Shadow snapshot unavailable or failed validation, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "500": { description: Unexpected request failure, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /lexicon/hebrew-vowel-variants/{variantGroupId}/members/{rootId}/{rootFormSeq}/{vowelSeq}/occurrences:
+    get:
+      operationId: getHebrewVowelVariantMemberOccurrences
+      tags: [lexicon]
+      summary: Read source occurrences for one member
+      description: Returns exact source tokens and occurrence-level Strong's and morphology assignments, in stable word-ID order. Pagination cursors are opaque to clients.
+      security:
+        - SandboxToken: []
+      parameters:
+        - name: variantGroupId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: rootId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: rootFormSeq
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: vowelSeq
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, maxLength: 160 }
+      responses:
+        "200":
+          description: Paginated member occurrences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OccurrencesResponse"
+        "400": { description: "Invalid identifier, limit, or cursor", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "403": { description: Sandbox authorization required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Group or member not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "503": { description: Shadow snapshot unavailable or failed validation, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "500": { description: Unexpected request failure, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
 components:
+  securitySchemes:
+    SandboxToken:
+      type: apiKey
+      in: header
+      name: x-sandbox-token
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
-
+        status: { type: string }
+      required: [status]
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+    VariantDataset:
+      type: object
+      properties:
+        algorithmVersion: { type: string }
+        normalizationForm: { type: string, const: NFC }
+        sourceSnapshotId: { type: string }
+        validation: { type: string, const: runtime-invariants-passed }
+      required: [algorithmVersion, normalizationForm, sourceSnapshotId, validation]
+    VariantGroupSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        language: { type: string, enum: [hebrew, aramaic] }
+        relation: { type: string, const: vowel-only-orthographic-variant }
+        dataset: { $ref: "#/components/schemas/VariantDataset" }
+      required: [id, language, relation, dataset]
+    ByWordResponse:
+      type: object
+      properties:
+        group:
+          oneOf:
+            - $ref: "#/components/schemas/VariantGroupSummary"
+            - type: "null"
+      required: [group]
+    RootFormMetadata:
+      type: object
+      properties:
+        prefix1: { type: [string, "null"] }
+        prefix2: { type: [string, "null"] }
+        prefix3: { type: [string, "null"] }
+        suffix1: { type: [string, "null"] }
+        suffix2: { type: [string, "null"] }
+        prefix1Display: { type: [string, "null"] }
+        prefix2Display: { type: [string, "null"] }
+        prefix3Display: { type: [string, "null"] }
+        suffix1Display: { type: [string, "null"] }
+        suffix2Display: { type: [string, "null"] }
+      required: [prefix1, prefix2, prefix3, suffix1, suffix2, prefix1Display, prefix2Display, prefix3Display, suffix1Display, suffix2Display]
+    VariantMember:
+      type: object
+      properties:
+        memberKey:
+          type: object
+          properties:
+            rootId: { type: integer }
+            rootFormSeq: { type: integer }
+            vowelSeq: { type: integer }
+          required: [rootId, rootFormSeq, vowelSeq]
+        pointedForm: { type: string }
+        root: { type: string }
+        rootForm: { $ref: "#/components/schemas/RootFormMetadata" }
+        occurrenceCount: { type: integer, minimum: 0 }
+      required: [memberKey, pointedForm, root, rootForm, occurrenceCount]
+    VariantGroup:
+      allOf:
+        - $ref: "#/components/schemas/VariantGroupSummary"
+        - type: object
+          properties:
+            members:
+              type: array
+              items: { $ref: "#/components/schemas/VariantMember" }
+            interpretiveLimit: { type: string }
+          required: [members, interpretiveLimit]
+    VariantGroupResponse:
+      type: object
+      properties:
+        group: { $ref: "#/components/schemas/VariantGroup" }
+      required: [group]
+    OccurrenceMorphology:
+      type: object
+      properties:
+        id: { type: integer }
+        pattern: { type: string }
+        language: { type: string }
+      required: [id, pattern, language]
+    OccurrenceVerse:
+      type: object
+      properties:
+        book: { type: string }
+        bookHebrew: { type: string }
+        chapter: { type: integer }
+        verse: { type: integer }
+      required: [book, bookHebrew, chapter, verse]
+    VariantOccurrence:
+      type: object
+      properties:
+        wordId: { type: integer }
+        verse: { $ref: "#/components/schemas/OccurrenceVerse" }
+        wordPosition: { type: integer }
+        pointed: { type: string }
+        unpointed: { type: string }
+        language: { type: string, enum: [hebrew, aramaic] }
+        strongs: { type: [string, "null"] }
+        morphology:
+          oneOf:
+            - $ref: "#/components/schemas/OccurrenceMorphology"
+            - type: "null"
+      required: [wordId, verse, wordPosition, pointed, unpointed, language, strongs, morphology]
+    OccurrencesResponse:
+      type: object
+      properties:
+        groupId: { type: integer }
+        memberKey:
+          type: object
+          properties:
+            rootId: { type: integer }
+            rootFormSeq: { type: integer }
+            vowelSeq: { type: integer }
+          required: [rootId, rootFormSeq, vowelSeq]
+        language: { type: string, enum: [hebrew, aramaic] }
+        dataset: { $ref: "#/components/schemas/VariantDataset" }
+        limit: { type: integer }
+        occurrences:
+          type: array
+          items: { $ref: "#/components/schemas/VariantOccurrence" }
+        nextCursor: { type: [string, "null"] }
+      required: [groupId, memberKey, language, dataset, limit, occurrences, nextCursor]
