@@ -295,3 +295,45 @@ Observed project metadata and build events on 2026-11-08:
 This status is grounded in the GitHub main-branch source at `ac66891`, Vercel project/deployment metadata and build events, and the previously live-tested Lampy Hebrew variant API. It is not a claim that the browser has been tested against the SSO-protected Vercel deployment in this session. The current frontend source and deployment logs were inspected; the protected page itself was not opened, and no share link was created.
 
 Update this document when routes, deployment settings, service ownership, or frontend integration change.
+
+
+## Recommended implementation sequence and interim decisions
+
+The following are conservative project decisions for implementation planning, not claims that the corresponding runtime work is complete.
+
+### Forum integration: link-first default
+
+Until the forum gains a supported integration contract, BibleApp should expose the existing Lampy forum as an ordinary external destination. Do not embed forum pages, proxy authenticated HTML, or simulate verse-specific comments in the frontend.
+
+Rationale:
+- The inspected forum is a custom server-rendered Flask application, not a JSON-backed discussion service.
+- Its current schema associates posts with threads and threads with categories/authors; it has no Bible reference fields or foreign key.
+- Its local account/session model is separate from BibleApp's legacy account system and the Express sandbox-token mechanism.
+- No shared identity, SSO/session handoff, or supported JSON API was found in the inspected application.
+
+This is the lowest-risk initial integration and preserves the user's stated requirement that the forum remain on Lampy. It does **not** rule out later verse- or passage-specific discussions. That feature should be designed explicitly, including stable Bible reference identifiers, thread lifecycle, authentication, authorization, CSRF, and outage behavior, before implementation.
+
+### Canonical core API: staged consolidation
+
+Do not treat the current Express API as the complete BibleApp backend. It does not replace the Flask corpus routes, and its authoring routes currently overlap with the legacy Flask authoring surface.
+
+Recommended sequence:
+
+1. **Inventory and contract:** document every frontend-required read/write operation, current route, request/response shape, backing data, and authorization rule.
+2. **Read boundary:** establish one host-independent core API contract for corpus, lexicon, morphology, variants, alignments, and search. Keep source databases behind server-side adapters.
+3. **Write boundary:** designate one canonical translation-authoring write API. Preserve legacy Flask compatibility during migration, add equivalence tests, then retire duplicate write routes only after proven coverage and an approved cutover.
+4. **Identity boundary:** replace the sandbox-token gate for end-user operations with real user authentication, server-side ownership checks, and explicit account migration/linking decisions. Do not assume forum accounts and BibleApp accounts are identical.
+5. **Host portability:** make service endpoints, database connections, embedding runtime/model, and storage locations environment-configurable. No core feature may require Lampy's host, paths, or private network.
+6. **Migration:** stage a full restore and browser acceptance test on a non-Lampy host. Keep Lampy authoritative until parity, backups, rollback, and cutover are explicitly approved.
+
+The search implementation is deliberately deferred until the word-variant embedding rebuild is complete and independently validated. Do not couple the API consolidation to an unvalidated search redesign.
+
+### Work order
+
+1. Preserve and validate the completed embedding rebuild; no production search switch yet.
+2. Specify the core API contract and build a route-to-data/authorization matrix.
+3. Define the single canonical translation-authoring write path and compatibility plan.
+4. Implement and test the portable core read API and deployment configuration.
+5. Integrate the Lampy forum as link-first.
+6. Evaluate the new search dataset and specify search behavior, evaluation set, query embedding runtime, and API contract.
+7. Run non-Lampy staging acceptance tests, then prepare a separately approved migration/cutover plan.
