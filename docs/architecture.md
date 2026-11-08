@@ -351,3 +351,15 @@ A critical clarification from direct source inspection: the Express router appli
 The existing `kitcosby/BibleApp-pwa` is the initial portable frontend because it already contains the working Study, Read, Word, and Search experience. The Vite frontend in this monorepo remains a scaffold/experimental track until it reaches functional parity; do not rebuild the existing reader there as the first migration step.
 
 The PWA's API base is now deployment-configurable through its `config.js` (`window.BIBLEAPP_API_BASE`), defaulting to `/bible` to preserve current behavior. The hard-coded Lampy Funnel/tailnet fallback URLs have been removed. This only decouples the client from Lampy-specific hostnames; the default still reaches the Lampy Flask backend. The portable core API and data services have not yet been moved or deployed.
+
+
+## Portable core runtime progress — 2026-11-08
+
+The separate corpus Flask service source is maintained in `kitcosby/bible-project` (`website/app_v2.py`), and the live Lampy copy was verified byte-for-byte against that repository's `master` source during this work. Its portability prerequisite was merged in [`bible-project` PR #12](https://github.com/kitcosby/bible-project/pull/12), commit `c2a390414d67e4c880f26e8ed1d84ab3371f4d4b`:
+
+- `BIBLE_DATABASE_URL` can independently configure the corpus database.
+- `BIBLE_APP_DATABASE_URL` can independently configure the application/authoring database.
+- `BIBLEAPP_SESSION_SECRET` can provide a stable host-managed Flask session secret.
+- Existing local PG_HOST/PG_USER/BIBLE_DB/APP_DB defaults remain unchanged.
+
+This is code-level host configurability only. The live Lampy environment was not changed, the service was not restarted, and no database was migrated or moved. See `bible-project/website/DEPLOYMENT.md` for the new configuration contract and remaining blockers. The current search endpoint still depends on local Ollama and remains explicitly deferred for redesign.
