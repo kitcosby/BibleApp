@@ -202,6 +202,28 @@ Three separate identity mechanisms are visible in the inspected source:
 
 No SSO or account-linking contract was found. The schema and code should not be treated as proof that a Bible site account and a forum account represent the same person. A production architecture must explicitly decide whether to link existing accounts, adopt an identity provider, or retain separate forum login. It must also enforce translation ownership server-side; a sandbox token is not an end-user authorization model.
 
+
+### Search migration: pending word-variant embedding rebuild
+
+Kit clarified on 2026-11-08 that search functionality will be retooled after the current embedding rebuild completes (estimated approximately four additional hours at the time of the update). Do not treat the existing Ollama-backed YLT verse search as the target design, and do not spend migration effort making that implementation permanent.
+
+Important distinction between the two embedding datasets:
+
+- Existing verse-semantic search data: 31,102 YLT verse embeddings in `ylt_verses_embedding_store`. The current Flask `/api/search` route generates a query embedding through local Ollama (`nomic-embed-text`) and searches this store. This feature is separate from the new rebuild.
+- Rebuilding dataset: 528,565 embeddings keyed to the existing `word_variant` rows. The rebuild is isolated on the laptop in a separate database and reads the corpus source read-only. The recorded reconstruction embeds each variant's `letters` form. The exact original input string was not recovered, so this is a documented reconstruction, not proof of bit-for-bit reproduction of a lost prior embedding run. The reported embedding blob size is 3,072 bytes.
+
+Completion gates for the rebuild:
+1. Exactly 528,565 expected variant keys accounted for, with no missing or duplicate keys.
+2. Every embedding blob has the expected 3,072-byte size and agrees with the documented vector dimensionality/encoding.
+3. Representative rows and source-to-embedding key associations spot-checked.
+4. Failures, exclusions, and any reconstructed-input assumptions explicitly reported.
+5. Exported off the laptop and restored/verified independently before considering production use.
+6. No writes to the live application or production corpus during the isolated build.
+
+The intended search modes, query normalization, language handling, ranking strategy, production destination, and API/UI contract for these word-variant embeddings have **not yet been specified or approved**. Do not infer that the new vectors should replace verse search, nor assume that embedding each `letters` form automatically provides useful Hebrew/Greek semantic search. After validation, design and evaluate the search experience against actual user tasks and a representative test set. Keep the old verse-search path available until a replacement is validated; do not silently switch production search.
+
+For portability planning, classify the current local Ollama query-embedding call as a **temporary legacy dependency**. The final search design must explicitly specify where query embeddings are generated and how that runtime/model is provisioned on the non-Lampy host. This decision is open pending completion and validation of the new dataset and search design.
+
 ### Portability acceptance tests
 
 A non-Lampy staging deployment is not portable until all of these pass with Lampy network access blocked, except for the deliberately excluded forum path:
