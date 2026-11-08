@@ -189,3 +189,50 @@ The Express API's current operations are not yet behaviorally equivalent to the 
 - Legacy export, reading-position behavior, and rendered read/study routes are not represented in the current Express route set.
 
 Therefore the planned canonical write API must be specified from actual legacy behavior and existing data semantics, not by assuming the current Express endpoints are complete replacements.
+
+
+## 8. Existing BibleApp PWA client contract (separate repository)
+
+The current reader client is in `kitcosby/BibleApp-pwa`, not in the Vercel monorepo's placeholder frontend. Its `main` branch `index.html` is a single-file static PWA with no build step or server code.
+
+### API base selection
+
+The current `API_BASES` order in `index.html` is:
+
+1. `https://laptop.taila7a335.ts.net:8443/bible`
+2. `https://laptop.taila7a335.ts.net/bible`
+3. `/bible` (same-host relative path)
+
+These are fallback addresses for the same Lampy Flask API, not independent portable backends. The client probes in order, keeps the last successful base for the session, memoizes successful JSON responses, and applies a cooldown after failures. A portable deployment must replace this hard-coded Lampy fallback list with a single explicitly configured core API base (or an equally explicit host configuration), not preserve the fallback chain as if it were high availability.
+
+### Client-requested endpoints
+
+The PWA uses these GET routes:
+
+- `/api/books`
+- `/api/chapters/:book`
+- `/api/verses/:book/:chapter`
+- `/api/verse/:book/:chapter/:verse`
+- `/api/chapter/:book/:chapter`
+- `/api/word/:strongs`
+- `/api/search?q=:query`
+
+When mounted under the current `/bible` prefix, these resolve to the public `/bible/api/...` routes. This matches the Lampy Flask route inventory above.
+
+### Browser-side state and offline behavior
+
+The PWA stores rendering choices and witness/tradition preferences in browser storage (including localStorage), and uses service-worker caches for the shell and successful API responses. This is distinct from the legacy Flask translation-authoring database and the Express API's `bible_app` database.
+
+Therefore:
+- Do not claim PWA rendering choices are currently persisted to the server.
+- Do not assume these local preferences are already represented by the Express translation-authoring routes.
+- A future account-backed sync feature needs a deliberate import/export and conflict-resolution design; it must not silently overwrite either localStorage choices or existing `word_choice` records.
+- Offline cache behavior must remain explicit and must not disguise stale data as freshly synchronized server state.
+
+### Product boundary clarification
+
+There are currently two distinct frontend efforts:
+1. `BibleApp-pwa`: the functioning static Study/Read/Word/Search client, currently calling Lampy's Flask API.
+2. `BibleApp` monorepo's `artifacts/build-your-translation`: a separate Vite frontend scaffold whose current `App.tsx` is a placeholder.
+
+They must not be conflated in migration plans. Decide whether the existing PWA is the initial portable frontend, whether the Vite app will replace it, or whether both remain supported. No replacement or retirement decision has been made.
