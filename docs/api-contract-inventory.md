@@ -130,3 +130,62 @@ For each operation, the eventual contract must state: HTTP method/path, request 
 ## Evidence and limitations
 
 The Express route inventory is derived from current repository source: `artifacts/api-server/src/app.ts`, `src/routes/index.ts`, `src/routes/bible.ts`, `src/routes/hebrew-vowel-variants.ts`, `src/lib/hebrew-variant-db.ts`, and `lib/db/src/index.ts`. The Flask route inventory reflects the previously inspected live Lampy `app_v2.py` and the existing PWA's calls; the Flask source is not in this repository and should be re-inspected from the authoritative Lampy checkout before implementation. This document does not claim live service checks were run during this inventory.
+
+
+## 7. Expanded legacy Flask route inventory (read-only Lampy inspection)
+
+The authoritative Flask source was re-inspected on the connected laptop via `wsl -d lampy -u root`. The following route decorators were found in `/opt/bible/website/app_v2.py`:
+
+| Route | Methods | Classification | Notes |
+|---|---|---|---|
+| `/` | GET | Legacy UI | Main Bible/interlinear surface |
+| `/signup` | GET, POST | Identity | Local BibleApp account creation |
+| `/login` | GET, POST | Identity | Local BibleApp login |
+| `/logout` | GET | Identity | Local session logout |
+| `/books` | GET | Core UI | Book navigation |
+| `/book/<n>` | GET | Core UI | Book view |
+| `/chapter/<n>/<c>` | GET | Core UI | Chapter/interlinear view |
+| `/verse/<n>/<c>/<v>` | GET | Core UI | Verse/interlinear view |
+| `/choice` | POST | Authoring write | Saves a word choice; may create Other option and lemma default |
+| `/translations` | GET, POST | Authoring read/write | Lists and creates translations |
+| `/reading/<tid>/<n>/<c>/<v>` | GET | Read UI | Clean reading view |
+| `/read` | GET | Read UI | Reading navigation |
+| `/read/<n>/<c>` | GET | Read UI | Chapter reading |
+| `/export/<tid>` | GET | Authoring export | Exports a translation |
+| `/word/<wid>` | GET | Linguistics UI | Word/lexicon detail |
+| `/variants` | GET | Witness/variant UI | Variant browsing |
+| `/interlinear` | GET | Core UI | Interlinear landing |
+| `/interlinear/<n>/<c>/<v>` | GET | Core UI | Interlinear verse view |
+| `/api/books` | GET | Core API | Book list |
+| `/api/chapters/<n>` | GET | Core API | Chapter list |
+| `/api/verses/<n>/<c>` | GET | Core API | Verse list |
+| `/api/verse/<n>/<c>/<v>` | GET | Core API | Verse payload |
+| `/api/chapter/<n>/<c>` | GET | Core API | Chapter payload |
+| `/api/word/<strongs>` | GET | Core API | Hebrew/Greek Strong's lookup |
+| `/api/search` | GET | Core API | Current semantic verse search |
+| `/papyrus-tile.png` | GET | Static asset | UI asset, not a core data API |
+
+### Legacy authoring and identity observations
+
+Further read-only inspection of the Flask handlers established:
+
+- `current_user()` reads `session['user_id']` and selects an active row from `user_accounts`.
+- `current_translation()` reads the `t` query parameter and selects by `translation_id`; it does **not** check that the current user owns or is authorized to edit that translation.
+- `/translations` GET queries all translations and renders them, including owner display names when available.
+- `/translations` POST creates a translation. It associates the row with an `app_user` record selected/created by legacy logic and stores the current authenticated `user_accounts.user_id` as `owner_id` when a user is signed in. The fallback legacy `app_user` logic is not a suitable modern identity model.
+- `/choice` POST uses the currently selected translation, word ID, and submitted item. It can insert an Other option, persists the word choice, records a forward-only lemma default, and updates the translation timestamp. The inspected handler does not enforce that the signed-in user owns the selected translation.
+- The API GET routes are read-only and do not require a BibleApp session in the inspected handlers. The API CORS helper was previously observed setting `Access-Control-Allow-Origin: *`.
+- `/api/search?q=...` requires `q`; `limit` defaults to 10 and is clamped to 1–25 (invalid numeric input falls back to 10). It calls local Ollama `nomic-embed-text` at `127.0.0.1:11434` and returns ranked YLT verse snippets with similarity scores. Failure to reach the embedding service returns 503.
+
+These observations make the ownership gap concrete in both legacy and Express authoring paths. Do not expose either write surface publicly until one canonical authorization model is implemented and covered by cross-user tests.
+
+### Important compatibility implications
+
+The Express API's current operations are not yet behaviorally equivalent to the legacy Flask authoring flow:
+
+- Legacy `/choice` resolves dropdown item indices against KJV, Young's, and user-defined options; it may create an Other option and updates a lemma default for subsequent occurrences.
+- Express `PUT .../choices/:wordId` accepts a numeric choice byte and stores it directly; the handler does not reproduce the legacy dropdown resolution or lemma-default behavior.
+- Legacy translation creation stores owner identity using the Flask account/session context; the Express API currently has no translation-create route in the inspected router.
+- Legacy export, reading-position behavior, and rendered read/study routes are not represented in the current Express route set.
+
+Therefore the planned canonical write API must be specified from actual legacy behavior and existing data semantics, not by assuming the current Express endpoints are complete replacements.
