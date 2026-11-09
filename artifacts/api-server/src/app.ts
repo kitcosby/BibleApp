@@ -25,7 +25,33 @@ app.use(
     },
   }),
 );
-app.use(cors());
+const allowedOrigins = new Set(
+  (process.env.BIBLEAPP_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean),
+);
+
+// Bearer-token API: no ambient browser credentials and no wildcard CORS.
+// Requests without Origin remain available to trusted server-side callers.
+app.use((req, res, next) => {
+  const origin = req.header("Origin");
+  if (!origin) return next();
+  if (!allowedOrigins.has(origin.replace(/\/$/, ""))) {
+    res.status(403).json({ error: "Origin not allowed" });
+    return;
+  }
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.setHeader("Access-Control-Max-Age", "600");
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
