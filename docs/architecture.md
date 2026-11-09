@@ -4,6 +4,8 @@
 **Repository:** `kitcosby/BibleApp`  
 **Observed main commit:** `ac66891d346104dc33845e22c80c883e5a58fa6b`
 
+**Security follow-up — 2026-11-09:** Draft [PR #9](https://github.com/kitcosby/BibleApp/pull/9) now stages a Flask-issued, five-minute HS256 bearer identity for Express, exact-origin CORS, and owner-filtered translation reads/writes. Its Flask issuer is in [bible-project PR #15](https://github.com/kitcosby/bible-project/pull/15); Flask login hardening and Flask route ownership are in PRs #13 and #14. These are unmerged source changes only. The deployed/main behavior remains the sandbox-token baseline described in the historical observations below until the dependency chain is reviewed, merged, configured, and separately deployed. No production secrets or services were changed.
+
 This document distinguishes the Replit/Vercel scaffold from the operational BibleApp services. A successful Vercel build proves that the selected frontend package can be built and hosted; it does not prove that the BibleApp experience or its backend dependencies are complete or independently available.
 
 ## Executive summary

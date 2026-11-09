@@ -1,22 +1,22 @@
 # BibleApp Core API Contract Inventory
 
-**Status:** Initial source-backed inventory, 2026-11-08  
-**Branch:** `api-contract-inventory-20261108`  
-**Scope:** Current GitHub implementation on `main`; Lampy Flask corpus routes are identified separately as an existing external service. This document is an inventory, not an approval to expose the current API publicly or migrate production data.
+**Status:** Baseline inventory (2026-11-08) with staged security delta (2026-11-09).  
+**Baseline:** `main` at `742446785a39bec3178d2954589ebcb86a6a59a7`.  
+**Scope:** The opening findings describe that baseline. The Express route inventory and identity-token section describe the staged changes on BibleApp PR #9, not deployed behavior. Lampy Flask corpus routes are identified separately as the existing service. This document is not approval to expose the API publicly or migrate production data.
 
 ## Executive finding
 
-The monorepo does not currently contain one complete BibleApp core API.
+The repository does not yet contain one complete, portable BibleApp core API.
 
 - The Express service in `artifacts/api-server` exposes health, translation-authoring, and Hebrew vowel-variant routes.
 - Corpus, morphology, verse, word, and search reads are still provided by the separate Lampy Flask application at `/bible`.
-- The current frontend package is still a placeholder and does not consume either API.
-- The Express service's current sandbox-token mechanism is not end-user authentication. Translation ownership is not enforced by the inspected handlers.
-- The Express app currently enables unrestricted default CORS with `app.use(cors())`. That is not a production access policy.
+- The separate `BibleApp-pwa` repository consumes the public read-only Flask corpus API; the frontend package inside this Express monorepo remains a scaffold.
+- At the baseline `main` commit, Express uses a shared sandbox token and does not enforce per-user translation ownership; its CORS policy is unrestricted.
+- Draft BibleApp PR #9 stages a Flask-issued bearer identity, exact-origin CORS, and owner enforcement. Those changes are not on `main` and have not been deployed.
 
 A portability effort must therefore define and implement a complete core contract rather than merely relocate the existing Express process.
 
-## 1. Current Express API
+## 1. Express API (staged security branch)
 
 Base mount: `/api`  
 Server entry: `artifacts/api-server/src/index.ts`  
@@ -28,27 +28,27 @@ Router: `artifacts/api-server/src/routes/index.ts`
 | Concern | Current behavior | Assessment |
 |---|---|---|
 | Request logging | Pino HTTP; query strings removed from logged URL | Positive baseline; review body/header logging before adding auth |
-| CORS | Express `cors()` defaults | Broad origin access; replace with explicit allowlist and credential policy |
+| CORS | Explicit `BIBLEAPP_ALLOWED_ORIGINS` allowlist; bearer API does not enable credentialed CORS | Configure exact HTTPS origins; no wildcard |
 | Body parsing | JSON and URL-encoded | Existing |
-| Health | Health router mounted before protected route groups | Health route is separate from authoring and variant routes |
-| Authoring authorization | Router middleware on `/bible` requires `BIBLE_APP_SANDBOX_TOKEN` for every route below that prefix | Shared secret, not user identity |
-| Variant authorization | Variant router has its own timing-safe comparison of `BIBLE_APP_SANDBOX_TOKEN` | Shared secret, not user identity |
-| Browser credentials | No user session or bearer identity contract in inspected route code | Not suitable for public multi-user authoring |
-| Ownership | Translation handlers verify existence, but do not check caller ownership | Critical authorization gap |
+| Health | `GET /api/healthz` is public liveness; `/api/bible/healthz` is behind user identity | Does not disclose credentials or database names |
+| Authoring authorization | `/bible` requires a short-lived HS256 identity token issued by the authenticated Flask session | Per-user identity, not the shared sandbox token |
+| Variant authorization | Variant router retains its separate timing-safe `BIBLE_APP_SANDBOX_TOKEN` check | Internal-only until a deliberate public-read policy is approved |
+| Browser credentials | Browser obtains a five-minute bearer token from Flask using its existing session cookie and CSRF token | No shared service secret in browser; bearer token kept in memory |
+| Ownership | Translation list/detail are filtered to the authenticated owner plus the two verified built-in read-only translations; writes lock and verify the owner row | Cross-user access denied |
 | Database | `DATABASE_URL` pool for authoring; dedicated `HEBREW_VARIANT_DATABASE_URL` pool for read-only variant shadow data | Keep isolated; never expose URLs to browser |
 
-The route-level middleware in `routes/index.ts` means that **all** `/api/bible/*` routes, including translation list/detail and the nested health route, require the sandbox token. Do not document the GET endpoints as public.
+The router-level middleware in `routes/index.ts` means that **all** `/api/bible/*` routes require a valid Flask-issued bearer identity token, including translation list/detail and the nested database health route. The separate Hebrew-variant endpoints still require the server-side sandbox token. Neither route family should receive a service-wide secret in browser code.
 
 ### Current route inventory
 
 | Method and path | Data / behavior | Auth currently applied | Portability / contract notes |
 |---|---|---|---|
-| `GET /api/healthz` | Process health | No sandbox middleware | Health router is mounted before protected route groups |
-| `GET /api/bible/healthz` | Checks legacy authoring DB pool with `SELECT 1` | Sandbox token via `/bible` prefix middleware | Prefer one documented health route; avoid exposing DB details |
-| `GET /api/bible/translations` | Lists translation metadata, including `user_id` and `owner_id` | Sandbox token | Returns all rows; no per-user filtering or authorization in handler |
-| `GET /api/bible/translations/:translationId` | Translation metadata, other options, selected word count, lemma defaults | Sandbox token | Existence check only; no caller/owner authorization |
-| `PUT /api/bible/translations/:translationId/choices/:wordId` | Upserts or deletes a word choice; updates translation timestamp | Sandbox token plus route-local duplicate check | Does not verify translation ownership or that word ID is valid in canonical corpus |
-| `POST /api/bible/translations/:translationId/options` | Inserts an alternate rendering option | Sandbox token | Does not verify caller ownership; concurrency and ordering semantics need review |
+| `GET /api/healthz` | Process health | Public liveness only | No database details or credentials |
+| `GET /api/bible/healthz` | Checks legacy authoring DB pool with `SELECT 1` | Flask-issued bearer identity | Authenticated DB health check; prefer the public process liveness route for probes |
+| `GET /api/bible/translations` | Lists built-in and caller-owned translation metadata | Flask-issued bearer identity | Filters by verified account ID; built-ins are matched by ID and name |
+| `GET /api/bible/translations/:translationId` | Translation metadata, other options, selected word count, lemma defaults | Flask-issued bearer identity | Authorizes the parent translation before reading child rows |
+| `PUT /api/bible/translations/:translationId/choices/:wordId` | Upserts or deletes a word choice; updates translation timestamp | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; word ID bounded to the canonical corpus range |
+| `POST /api/bible/translations/:translationId/options` | Inserts an alternate rendering option | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; row lock serializes option index allocation |
 
 ### Hebrew vowel-variant endpoints
 
@@ -61,6 +61,30 @@ All three endpoints below are mounted at `/api/lexicon/hebrew-vowel-variants` an
 | `GET /api/lexicon/hebrew-vowel-variants/:variantGroupId/members/:rootId/:rootFormSeq/:vowelSeq/occurrences` | Paginates occurrences for a group member | Default limit 50; allowed 1–100; opaque base64url cursor tied to group/member identifiers |
 
 The exact JSON response shapes are defined by the current TypeScript handlers. Before making this a stable public contract, extract those shapes into shared schemas and contract tests rather than hand-maintaining duplicate definitions.
+
+## Identity-token contract (staged implementation)
+
+The existing Flask `user_accounts` table and Flask session remain the sole account authority. Once a user is authenticated in Flask, the browser can obtain a short-lived API token:
+
+1. The browser calls `GET /bible/api/auth/csrf` using `credentials: "include"`. Flask returns the session-bound CSRF token and requires an active account.
+2. The browser sends `POST /bible/api/auth/token` with `credentials: "include"` and `X-CSRF-Token`. Flask verifies the session, active account, CSRF token, and allowed Origin.
+3. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
+4. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
+5. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
+
+**Client-integration status:** the current PWA still calls only the public, read-only Flask corpus endpoints (books, chapters, verses, word, search). It does not yet call the Express translation-authoring endpoints or the new token exchange. The token exchange and Express authorization are staged backend contracts; do not imply that the PWA account UI or authoring workflow is already wired to them. Client integration should follow a separate UI/API contract review.
+
+Express marks every `/api/bible/*` response `Cache-Control: private, no-store`. The PWA service-worker hardening in [BibleApp-pwa PR #2](https://github.com/kitcosby/BibleApp-pwa/pull/2) bypasses the shared API cache for session/auth routes, bearer-authenticated requests, and the private Bible API; it also refuses to cache `no-store` responses and removes the old cache versions. This is required to prevent cross-account response reuse on a shared device.
+
+Required environment configuration (values are secrets and must never be committed or sent to the browser):
+
+- `BIBLEAPP_IDENTITY_TOKEN_SECRET`: the same independently generated random value of at least 32 UTF-8 bytes in Flask and Express. This is separate from the Flask session secret and sandbox token.
+- `BIBLEAPP_ALLOWED_ORIGINS`: comma-separated exact HTTPS origins allowed by Flask's token endpoint and Express API. No wildcard or URL paths.
+- For cross-site browser login, Flask must use `BIBLEAPP_COOKIE_SAMESITE=None` and `BIBLEAPP_COOKIE_SECURE=1`; this is rejected at startup if Secure is not enabled. Same-origin deployments can retain the default Lax cookie.
+
+The token is not immediately revocable after logout or account deactivation; the residual exposure window is at most five minutes. Do not call this server-side session revocation. A later revocation/introspection design may be needed for higher-risk operations.
+
+The API identity token does not replace the separate Hebrew-variant sandbox token yet. That route family remains internal-only. This staged work does not add translation creation to Express or make Express's numeric choice operation behaviorally equivalent to Flask's dropdown/Other-option/lemma-default behavior. Those contract gaps remain open.
 
 ## 2. Existing Lampy Flask corpus API
 

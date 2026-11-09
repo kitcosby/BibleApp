@@ -29,16 +29,26 @@ the successful sandbox tests.
 
 ## Safety boundary
 
-- The API binds to `127.0.0.1` only.
-- All `/api/bible/*` routes require the sandbox token in the
-  `x-sandbox-token` header.
-- The sandbox token is not production authentication.
-- Keep the API localhost/tailnet-only until real user authentication and
-  per-user ownership checks are implemented and reviewed.
+- The API entrypoint binds to `127.0.0.1` only.
+- On the staged `express-user-identity-20261109` branch, all
+  `/api/bible/*` routes require a short-lived Flask-issued HS256 bearer
+  identity. The verified Flask account ID is the sole owner identity.
+- Translation list/detail routes are filtered to the caller's own rows plus
+  the two built-in read-only translations (KJV ID 1 and Young's ID 2).
+  Choice and Other-option writes lock the translation row and reject
+  built-ins, unassigned legacy rows, and non-owner IDs.
+- The separate Hebrew-vowel-variant routes still require the
+  `x-sandbox-token` header and remain internal-only.
+- The shared sandbox token is not end-user authentication and must never be
+  sent to a browser.
+- Explicit `BIBLEAPP_ALLOWED_ORIGINS` values are required for browser CORS.
+  Flask and Express must use the same exact frontend origin allowlist.
 - Keep PostgreSQL on localhost. Never expose port 5432 or forward it to the
   public internet.
-- Never commit `DATABASE_URL`, `BIBLE_APP_SANDBOX_TOKEN`, passwords, or
-  other secrets.
+- Never commit `DATABASE_URL`, `BIBLE_APP_SANDBOX_TOKEN`,
+  `BIBLEAPP_IDENTITY_TOKEN_SECRET`, passwords, or other secrets.
+- These changes are source-only until separately reviewed, merged, configured,
+  deployed, and tested end-to-end. The live Lampy service has not been changed.
 - Do not run `drizzle-kit push`, `push-force`, or schema migrations against
   the existing database.
 - Do not use the PostgreSQL superuser in the API connection string.
@@ -55,28 +65,20 @@ All paths are under `/api`.
 | PUT | `/bible/translations/:translationId/choices/:wordId` | Set a word choice; choice 0 removes the sparse row |
 | POST | `/bible/translations/:translationId/options` | Add an Other rendering |
 
-Every route requires `x-sandbox-token`. Mutations use parameterized SQL;
-word-choice changes are transactional.
+All `/bible/*` routes require the Flask-issued bearer identity on the
+staged branch. The Hebrew-variant routes retain their separate sandbox-token
+gate. Mutations use parameterized SQL; choice and option writes are
+transactional and enforce translation ownership.
 
-## Current deployment state
+## Historical deployment snapshot (2026-11-05)
 
-The API is **not yet installed as a supervised Lampy service**.
-
-Inspection of the live configuration found:
-
-- Supervisor has the eight existing services but no BibleApp API entry.
-- Apache proxies `/app` to the forum and `/bible` to the legacy Flask app;
-  it has no `/api/` proxy.
-- Linux Node.js 24.22.1 LTS is now installed in WSL at `/opt/node`.
-  Node 24.22.1, npm 11.19.1, and Corepack 0.36.0 were verified.
-- Git and GitHub CLI are installed. A read-only deploy key has been
-  generated locally; repository authorization and checkout are pending.
-- The API entrypoint listens on `127.0.0.1` and requires `PORT`.
-  The environment file reports `PORT=8799`.
-
-The Linux runtime decision is complete. The next blocker is authorizing
-the Lampy read-only deploy key on the private GitHub repository so the
-branch can be checked out and built on the machine.
+The following records the initial deployment baseline only; it is not a
+current-status assertion. The deployment log in
+docs/bibleapp-lampy-deployment-log.md records the later verified installation
+of the API under Supervisor, the Apache /api/ proxy, and successful health
+and database checks. Subsequent runtime and security changes must be checked
+against the live service before deployment. This identity/ownership PR has
+not been deployed.
 
 ## Deployment sequence
 
@@ -99,8 +101,10 @@ branch can be checked out and built on the machine.
    config passes validation; do not restart the whole Lampy stack.
 8. Test the API through localhost and the intended tailnet HTTPS ingress.
    Confirm the token gate, database connectivity, and read/write routes.
-9. Keep the API private until production authentication and per-user
-   authorization are implemented.
+9. Keep the API private until the Flask identity-token issuer and
+   Express verifier are merged, the same dedicated secret and explicit origin
+   allowlist are configured out-of-band on both services, and end-to-end
+   cross-user tests pass. Do not use the sandbox token as a browser credential.
 
 ## Deferred hardening
 
