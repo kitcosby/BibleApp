@@ -28,16 +28,16 @@ Router: `artifacts/api-server/src/routes/index.ts`
 | Concern | Current behavior | Assessment |
 |---|---|---|
 | Request logging | Pino HTTP; query strings removed from logged URL | Positive baseline; review body/header logging before adding auth |
-| CORS | Express `cors()` defaults | Broad origin access; replace with explicit allowlist and credential policy |
+| CORS | Explicit `BIBLEAPP_ALLOWED_ORIGINS` allowlist; bearer API does not enable credentialed CORS | Configure exact HTTPS origins; no wildcard |
 | Body parsing | JSON and URL-encoded | Existing |
-| Health | Health router mounted before protected route groups | Health route is separate from authoring and variant routes |
-| Authoring authorization | Router middleware on `/bible` requires `BIBLE_APP_SANDBOX_TOKEN` for every route below that prefix | Shared secret, not user identity |
-| Variant authorization | Variant router has its own timing-safe comparison of `BIBLE_APP_SANDBOX_TOKEN` | Shared secret, not user identity |
-| Browser credentials | No user session or bearer identity contract in inspected route code | Not suitable for public multi-user authoring |
-| Ownership | Translation handlers verify existence, but do not check caller ownership | Critical authorization gap |
+| Health | `GET /api/healthz` is public liveness; `/api/bible/healthz` is behind user identity | Does not disclose credentials or database names |
+| Authoring authorization | `/bible` requires a short-lived HS256 identity token issued by the authenticated Flask session | Per-user identity, not the shared sandbox token |
+| Variant authorization | Variant router retains its separate timing-safe `BIBLE_APP_SANDBOX_TOKEN` check | Internal-only until a deliberate public-read policy is approved |
+| Browser credentials | Browser obtains a five-minute bearer token from Flask using its existing session cookie and CSRF token | No shared service secret in browser; bearer token kept in memory |
+| Ownership | Translation list/detail are filtered to the authenticated owner plus the two verified built-in read-only translations; writes lock and verify the owner row | Cross-user access denied |
 | Database | `DATABASE_URL` pool for authoring; dedicated `HEBREW_VARIANT_DATABASE_URL` pool for read-only variant shadow data | Keep isolated; never expose URLs to browser |
 
-The route-level middleware in `routes/index.ts` means that **all** `/api/bible/*` routes, including translation list/detail and the nested health route, require the sandbox token. Do not document the GET endpoints as public.
+The router-level middleware in `routes/index.ts` means that **all** `/api/bible/*` routes require a valid Flask-issued bearer identity token, including translation list/detail and the nested database health route. The separate Hebrew-variant endpoints still require the server-side sandbox token. Neither route family should receive a service-wide secret in browser code.
 
 ### Current route inventory
 
@@ -61,6 +61,26 @@ All three endpoints below are mounted at `/api/lexicon/hebrew-vowel-variants` an
 | `GET /api/lexicon/hebrew-vowel-variants/:variantGroupId/members/:rootId/:rootFormSeq/:vowelSeq/occurrences` | Paginates occurrences for a group member | Default limit 50; allowed 1–100; opaque base64url cursor tied to group/member identifiers |
 
 The exact JSON response shapes are defined by the current TypeScript handlers. Before making this a stable public contract, extract those shapes into shared schemas and contract tests rather than hand-maintaining duplicate definitions.
+
+## Identity-token contract (staged implementation)
+
+The existing Flask `user_accounts` table and Flask session remain the sole account authority. Once a user is authenticated in Flask, the browser can obtain a short-lived API token:
+
+1. The browser calls `GET /bible/api/auth/csrf` using `credentials: "include"`. Flask returns the session-bound CSRF token and requires an active account.
+2. The browser sends `POST /bible/api/auth/token` with `credentials: "include"` and `X-CSRF-Token`. Flask verifies the session, active account, CSRF token, and allowed Origin.
+3. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
+4. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
+5. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
+
+Required environment configuration (values are secrets and must never be committed or sent to the browser):
+
+- `BIBLEAPP_IDENTITY_TOKEN_SECRET`: the same independently generated random value of at least 32 UTF-8 bytes in Flask and Express. This is separate from the Flask session secret and sandbox token.
+- `BIBLEAPP_ALLOWED_ORIGINS`: comma-separated exact HTTPS origins allowed by Flask's token endpoint and Express API. No wildcard or URL paths.
+- For cross-site browser login, Flask must use `BIBLEAPP_COOKIE_SAMESITE=None` and `BIBLEAPP_COOKIE_SECURE=1`; this is rejected at startup if Secure is not enabled. Same-origin deployments can retain the default Lax cookie.
+
+The token is not immediately revocable after logout or account deactivation; the residual exposure window is at most five minutes. Do not call this server-side session revocation. A later revocation/introspection design may be needed for higher-risk operations.
+
+The API identity token does not replace the separate Hebrew-variant sandbox token yet. That route family remains internal-only. This staged work does not add translation creation to Express or make Express's numeric choice operation behaviorally equivalent to Flask's dropdown/Other-option/lemma-default behavior. Those contract gaps remain open.
 
 ## 2. Existing Lampy Flask corpus API
 
