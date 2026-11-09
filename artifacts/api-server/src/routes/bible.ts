@@ -253,7 +253,7 @@ router.put(
         const source = Number(lemmaDefault?.source);
         const otherOptionId = lemmaDefault?.otherOptionId == null
           ? null : Number(lemmaDefault.otherOptionId);
-        if (!/^(?:[HG]\d+|root:\d+\\.\d+\\.\d+)$/.test(lemma) ||
+        if (!/^(?:[HG]\d+|root:\d+\.\d+\.\d+)$/.test(lemma) ||
             lemma.length > 128 || !rendering || rendering.length > 2000 ||
             !Number.isSafeInteger(fromWordId) || fromWordId !== wordId ||
             fromWordId < 1 || fromWordId > 264217 || ![1, 2, 3].includes(source) ||
