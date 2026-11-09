@@ -237,3 +237,6 @@ Therefore:
 Use the existing `BibleApp-pwa` as the **initial portable frontend** because it already provides the functioning Study/Read/Word/Search experience. Keep `BibleApp` monorepo's Vite frontend as an experimental/scaffold track until it reaches functional parity; do not spend effort rebuilding the same reader UI there first.
 
 The Vite app's current `App.tsx` remains a placeholder. This decision does not prevent a future replacement, but any replacement must demonstrate parity and migration of browser-local preferences before the PWA is retired.
+
+
+Identity and translation-ownership findings and the recommended authorization model are documented in [Identity and Authorization](identity-and-authorization.md). This is a design recommendation, not an implemented or approved public-account policy.
