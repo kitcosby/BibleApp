@@ -35,7 +35,9 @@ test("accepts a correctly signed Flask identity token", () => {
 
 test("rejects an invalid signature", () => {
   const token = sign();
-  assert.throws(() => verifyIdentityToken(token.slice(0, -1) + "x", secret));
+  const parts = token.split(".");
+  const changedSignature = (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
+  assert.throws(() => verifyIdentityToken(parts[0] + "." + parts[1] + "." + changedSignature, secret));
 });
 
 test("rejects an expired token", () => {
