@@ -76,7 +76,7 @@ test("translation list is scoped to the verified account and marked no-store", a
   try {
     const response = await request("/api/bible/translations");
     assert.equal(response.status, 200);
-    assert.match(seenSql, /WHERE owner_id = \\$1 OR/);
+    assert.match(seenSql, /WHERE owner_id = \$1 OR/);
     assert.deepEqual(seenParams, [42]);
     assert.equal(response.headers.get("cache-control"), "private, no-store");
     assert.deepEqual((await response.json()).translations, [
@@ -98,7 +98,7 @@ test("translation detail denies a non-owner before querying child rows", async (
     const response = await request("/api/bible/translations/88");
     assert.equal(response.status, 404);
     assert.equal(queries.length, 1);
-    assert.match(queries[0], /owner_id = \\$2/);
+    assert.match(queries[0], /owner_id = \$2/);
   } finally {
     pool.query = original;
   }
@@ -194,7 +194,7 @@ test("Other-option creation locks and authorizes the translation before insert",
     assert.equal(response.status, 201);
     assert.equal(queries[1].sql,
       "SELECT owner_id FROM translation WHERE translation_id = $1 FOR UPDATE");
-    assert.match(queries[2].sql, /COALESCE\\(MAX\\(idx\\), 0\\) \\+ 1/);
+    assert.match(queries[2].sql, /COALESCE\(MAX\(idx\), 0\) \+ 1/);
     assert.deepEqual(queries[2].params, [88, "rendering"]);
     assert.equal(queries.at(-1).sql, "COMMIT");
   } finally {
