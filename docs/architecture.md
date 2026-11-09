@@ -363,3 +363,6 @@ The separate corpus Flask service source is maintained in `kitcosby/bible-projec
 - Existing local PG_HOST/PG_USER/BIBLE_DB/APP_DB defaults remain unchanged.
 
 This is code-level host configurability only. The live Lampy environment was not changed, the service was not restarted, and no database was migrated or moved. See `bible-project/website/DEPLOYMENT.md` for the new configuration contract and remaining blockers. The current search endpoint still depends on local Ollama and remains explicitly deferred for redesign.
+
+
+Identity and translation-ownership findings and the recommended authorization model are documented in [Identity and Authorization](identity-and-authorization.md). This is a design recommendation, not an implemented or approved public-account policy.
