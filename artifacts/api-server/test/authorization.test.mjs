@@ -330,3 +330,132 @@ test("choice write updates word choice and forward-only lemma default in one tra
     pool.connect = original;
   }
 });
+
+
+test("Other-option creation returns an exact existing duplicate without inserting", async () => {
+  const original = pool.connect;
+  const queries = [];
+  pool.connect = async () => ({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes("SELECT owner_id"))
+        return { rowCount: 1, rows: [{ owner_id: 42 }] };
+      if (sql.includes("SELECT option_id, translation_id"))
+        return { rowCount: 1, rows: [{
+          option_id: 3, translation_id: 88, idx: 2, text: "already here",
+        }] };
+      return { rowCount: 1, rows: [] };
+    },
+    release() {},
+  });
+  try {
+    const response = await request("/api/bible/translations/88/options", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "already here" }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).existing, true);
+    assert.equal(queries.length, 4);
+    assert.equal(queries.at(-1).sql, "COMMIT");
+  } finally {
+    pool.connect = original;
+  }
+});
+
+test("Other-option creation enforces the legacy 230-option ceiling", async () => {
+  const original = pool.connect;
+  const queries = [];
+  pool.connect = async () => ({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes("SELECT owner_id"))
+        return { rowCount: 1, rows: [{ owner_id: 42 }] };
+      if (sql.includes("SELECT option_id, translation_id"))
+        return { rowCount: 0, rows: [] };
+      if (sql.includes("SELECT COUNT(*)"))
+        return { rowCount: 1, rows: [{ count: 230, max_idx: 230 }] };
+      return { rowCount: 1, rows: [] };
+    },
+    release() {},
+  });
+  try {
+    const response = await request("/api/bible/translations/88/options", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "one too many" }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(queries.at(-1).sql, "ROLLBACK");
+    assert.equal(queries.some(q => q.sql.includes("INSERT INTO other_option")), false);
+  } finally {
+    pool.connect = original;
+  }
+});
+
+test("Other lemma default must reference an option in the same translation with identical text", async () => {
+  const original = pool.connect;
+  const queries = [];
+  pool.connect = async () => ({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes("SELECT owner_id"))
+        return { rowCount: 1, rows: [{ owner_id: 42 }] };
+      if (sql.includes("SELECT option_id, text"))
+        return { rowCount: 1, rows: [{ option_id: 12, text: "different text" }] };
+      return { rowCount: 1, rows: [] };
+    },
+    release() {},
+  });
+  try {
+    const response = await request("/api/bible/translations/88/choices/100", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        choice: 4,
+        lemmaDefault: {
+          lemma: "H430", rendering: "claimed text", fromWordId: 100,
+          source: 3, otherOptionId: 12,
+        },
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(queries.at(-1).sql, "ROLLBACK");
+    assert.equal(queries.some(q => q.sql.includes("INSERT INTO lemma_default")), false);
+    assert.equal(queries.some(q => q.sql.includes("COMMIT")), false);
+  } finally {
+    pool.connect = original;
+  }
+});
+
+test("lemma-default validation rejects a mismatched Strong's key and from-word ID", async () => {
+  const original = pool.connect;
+  const queries = [];
+  pool.connect = async () => ({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes("SELECT owner_id"))
+        return { rowCount: 1, rows: [{ owner_id: 42 }] };
+      return { rowCount: 1, rows: [] };
+    },
+    release() {},
+  });
+  try {
+    const response = await request("/api/bible/translations/88/choices/100", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        choice: 1,
+        lemmaDefault: {
+          lemma: "not-a-lemma", rendering: "text", fromWordId: 99,
+          source: 1, otherOptionId: null,
+        },
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(queries.at(-1).sql, "ROLLBACK");
+    assert.equal(queries.some(q => q.sql.includes("INSERT INTO lemma_default")), false);
+  } finally {
+    pool.connect = original;
+  }
+});
