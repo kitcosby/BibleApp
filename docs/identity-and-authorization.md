@@ -13,6 +13,21 @@ Make one server-side identity authority responsible for password verification, s
 
 The least disruptive target is to preserve existing Werkzeug password hashes and account IDs, while introducing a documented authentication boundary. The exact token/session mechanism should be chosen only after deciding the hosting topology and cross-origin cookie requirements. Do not implement a second password verifier or copy password hashes into another identity store as a shortcut.
 
+## Implementation direction confirmed by Kit
+
+Kit has confirmed that the existing login functionality should be expanded rather than replaced. This makes the legacy Flask account system the starting point and rules out creating a second BibleApp registration/login system as part of portability work.
+
+- Preserve the existing `user_accounts.user_id` values, usernames, and Werkzeug password hashes. Do not force account recreation or a password reset solely for the hosting move.
+- Continue to verify existing passwords with Werkzeug's `check_password_hash`. If a hash needs upgrading, rehash only after a successful login and only with a reviewed migration path.
+- Extend the current Flask signup/login/logout flow with security controls. Apply stronger requirements to new or changed passwords without abruptly rejecting existing passwords at login.
+- Harden sessions: clear/regenerate session state at authentication boundaries, configure Secure/HttpOnly/SameSite cookie attributes for the actual deployment topology, use a stable externally supplied signing secret, and define expiry and revocation behavior. Flask's default signed-cookie session is client-held; clearing it at logout does not by itself revoke a stolen copy, so revocation must be addressed explicitly.
+- Add CSRF protection to cookie-authenticated state changes, make logout POST-only, and add login throttling with a deployment-appropriate shared/persistent limiter rather than process-local counters on a multi-worker host.
+- Keep Flask as the credential-verification authority. The portable core API must consume a short-lived, verifiable user identity issued by that authority (or be placed behind the same authenticated Flask boundary). Do not duplicate password verification in Express, share the Flask session-signing secret with Express, or expose the sandbox token to browsers.
+- Prefer a same-origin reverse-proxy arrangement for the PWA and core API where practical. If the eventual host topology requires cross-origin API calls, document and test the exact credential, CORS, cookie, and CSRF contract before enabling them.
+- Preserve the Lampy forum's independent login. No automatic account linking by matching usernames.
+
+This is an implementation direction, not a claim that these controls are already present. The code changes should be staged and tested before any production environment or account rows are changed.
+
 ## Evidence from current source and live Lampy inspection
 
 ### Legacy Flask identity
