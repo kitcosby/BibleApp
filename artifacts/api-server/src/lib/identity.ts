@@ -17,7 +17,7 @@ function decodeSegment(segment: string): Buffer {
   return Buffer.from(segment, "base64url");
 }
 
-function verifyIdentityToken(token: string, secret: string): IdentityClaims {
+export function verifyIdentityToken(token: string, secret: string): IdentityClaims {
   if (token.length > 4096) throw new Error("Token too large");
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("Malformed token");
