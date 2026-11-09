@@ -70,25 +70,15 @@ staged branch. The Hebrew-variant routes retain their separate sandbox-token
 gate. Mutations use parameterized SQL; choice and option writes are
 transactional and enforce translation ownership.
 
-## Current deployment state
+## Historical deployment snapshot (2026-11-05)
 
-The API is **not yet installed as a supervised Lampy service**.
-
-Inspection of the live configuration found:
-
-- Supervisor has the eight existing services but no BibleApp API entry.
-- Apache proxies `/app` to the forum and `/bible` to the legacy Flask app;
-  it has no `/api/` proxy.
-- Linux Node.js 24.22.1 LTS is now installed in WSL at `/opt/node`.
-  Node 24.22.1, npm 11.19.1, and Corepack 0.36.0 were verified.
-- Git and GitHub CLI are installed. A read-only deploy key has been
-  generated locally; repository authorization and checkout are pending.
-- The API entrypoint listens on `127.0.0.1` and requires `PORT`.
-  The environment file reports `PORT=8799`.
-
-The Linux runtime decision is complete. The next blocker is authorizing
-the Lampy read-only deploy key on the private GitHub repository so the
-branch can be checked out and built on the machine.
+The following records the initial deployment baseline only; it is not a
+current-status assertion. The deployment log in
+docs/bibleapp-lampy-deployment-log.md records the later verified installation
+of the API under Supervisor, the Apache /api/ proxy, and successful health
+and database checks. Subsequent runtime and security changes must be checked
+against the live service before deployment. This identity/ownership PR has
+not been deployed.
 
 ## Deployment sequence
 
