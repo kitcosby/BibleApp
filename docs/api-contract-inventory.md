@@ -1,22 +1,22 @@
 # BibleApp Core API Contract Inventory
 
-**Status:** Initial source-backed inventory, 2026-11-08  
-**Branch:** `api-contract-inventory-20261108`  
-**Scope:** Current GitHub implementation on `main`; Lampy Flask corpus routes are identified separately as an existing external service. This document is an inventory, not an approval to expose the current API publicly or migrate production data.
+**Status:** Baseline inventory (2026-11-08) with staged security delta (2026-11-09).  
+**Baseline:** `main` at `742446785a39bec3178d2954589ebcb86a6a59a7`.  
+**Scope:** The opening findings describe that baseline. The Express route inventory and identity-token section describe the staged changes on BibleApp PR #9, not deployed behavior. Lampy Flask corpus routes are identified separately as the existing service. This document is not approval to expose the API publicly or migrate production data.
 
 ## Executive finding
 
-The monorepo does not currently contain one complete BibleApp core API.
+The repository does not yet contain one complete, portable BibleApp core API.
 
 - The Express service in `artifacts/api-server` exposes health, translation-authoring, and Hebrew vowel-variant routes.
 - Corpus, morphology, verse, word, and search reads are still provided by the separate Lampy Flask application at `/bible`.
-- The current frontend package is still a placeholder and does not consume either API.
-- The Express service's current sandbox-token mechanism is not end-user authentication. Translation ownership is not enforced by the inspected handlers.
-- The Express app currently enables unrestricted default CORS with `app.use(cors())`. That is not a production access policy.
+- The separate `BibleApp-pwa` repository consumes the public read-only Flask corpus API; the frontend package inside this Express monorepo remains a scaffold.
+- At the baseline `main` commit, Express uses a shared sandbox token and does not enforce per-user translation ownership; its CORS policy is unrestricted.
+- Draft BibleApp PR #9 stages a Flask-issued bearer identity, exact-origin CORS, and owner enforcement. Those changes are not on `main` and have not been deployed.
 
 A portability effort must therefore define and implement a complete core contract rather than merely relocate the existing Express process.
 
-## 1. Current Express API
+## 1. Express API (staged security branch)
 
 Base mount: `/api`  
 Server entry: `artifacts/api-server/src/index.ts`  
@@ -70,11 +70,11 @@ The existing Flask `user_accounts` table and Flask session remain the sole accou
 2. The browser sends `POST /bible/api/auth/token` with `credentials: "include"` and `X-CSRF-Token`. Flask verifies the session, active account, CSRF token, and allowed Origin.
 3. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
 4. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
+5. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
 
 **Client-integration status:** the current PWA still calls only the public, read-only Flask corpus endpoints (books, chapters, verses, word, search). It does not yet call the Express translation-authoring endpoints or the new token exchange. The token exchange and Express authorization are staged backend contracts; do not imply that the PWA account UI or authoring workflow is already wired to them. Client integration should follow a separate UI/API contract review.
 
 Express marks every `/api/bible/*` response `Cache-Control: private, no-store`. The PWA service-worker hardening in [BibleApp-pwa PR #2](https://github.com/kitcosby/BibleApp-pwa/pull/2) bypasses the shared API cache for session/auth routes, bearer-authenticated requests, and the private Bible API; it also refuses to cache `no-store` responses and removes the old cache versions. This is required to prevent cross-account response reuse on a shared device.
-5. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
 
 Required environment configuration (values are secrets and must never be committed or sent to the browser):
 
