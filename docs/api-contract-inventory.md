@@ -43,12 +43,12 @@ The router-level middleware in `routes/index.ts` means that **all** `/api/bible/
 
 | Method and path | Data / behavior | Auth currently applied | Portability / contract notes |
 |---|---|---|---|
-| `GET /api/healthz` | Process health | No sandbox middleware | Health router is mounted before protected route groups |
-| `GET /api/bible/healthz` | Checks legacy authoring DB pool with `SELECT 1` | Sandbox token via `/bible` prefix middleware | Prefer one documented health route; avoid exposing DB details |
-| `GET /api/bible/translations` | Lists translation metadata, including `user_id` and `owner_id` | Sandbox token | Returns all rows; no per-user filtering or authorization in handler |
-| `GET /api/bible/translations/:translationId` | Translation metadata, other options, selected word count, lemma defaults | Sandbox token | Existence check only; no caller/owner authorization |
-| `PUT /api/bible/translations/:translationId/choices/:wordId` | Upserts or deletes a word choice; updates translation timestamp | Sandbox token plus route-local duplicate check | Does not verify translation ownership or that word ID is valid in canonical corpus |
-| `POST /api/bible/translations/:translationId/options` | Inserts an alternate rendering option | Sandbox token | Does not verify caller ownership; concurrency and ordering semantics need review |
+| `GET /api/healthz` | Process health | Public liveness only | No database details or credentials |
+| `GET /api/bible/healthz` | Checks legacy authoring DB pool with `SELECT 1` | Flask-issued bearer identity | Authenticated DB health check; prefer the public process liveness route for probes |
+| `GET /api/bible/translations` | Lists built-in and caller-owned translation metadata | Flask-issued bearer identity | Filters by verified account ID; built-ins are matched by ID and name |
+| `GET /api/bible/translations/:translationId` | Translation metadata, other options, selected word count, lemma defaults | Flask-issued bearer identity | Authorizes the parent translation before reading child rows |
+| `PUT /api/bible/translations/:translationId/choices/:wordId` | Upserts or deletes a word choice; updates translation timestamp | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; word ID bounded to the canonical corpus range |
+| `POST /api/bible/translations/:translationId/options` | Inserts an alternate rendering option | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; row lock serializes option index allocation |
 
 ### Hebrew vowel-variant endpoints
 
