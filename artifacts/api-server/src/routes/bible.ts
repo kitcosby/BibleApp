@@ -253,9 +253,10 @@ router.put(
         const source = Number(lemmaDefault?.source);
         const otherOptionId = lemmaDefault?.otherOptionId == null
           ? null : Number(lemmaDefault.otherOptionId);
-        if (!lemma || lemma.length > 128 || !rendering || rendering.length > 2000 ||
-            !Number.isSafeInteger(fromWordId) || fromWordId < 1 || fromWordId > 264217 ||
-            ![1, 2, 3].includes(source) ||
+        if (!/^(?:[HG]\\d+|root:\\d+\\.\\d+\\.\\d+)$/.test(lemma) ||
+            lemma.length > 128 || !rendering || rendering.length > 2000 ||
+            !Number.isSafeInteger(fromWordId) || fromWordId !== wordId ||
+            fromWordId < 1 || fromWordId > 264217 || ![1, 2, 3].includes(source) ||
             (otherOptionId !== null && (!Number.isSafeInteger(otherOptionId) || otherOptionId < 1)) ||
             (source === 3 && otherOptionId === null) ||
             (source !== 3 && otherOptionId !== null)) {
@@ -265,11 +266,11 @@ router.put(
         }
         if (source === 3) {
           const option = await client.query(
-            "SELECT option_id FROM other_option " +
+            "SELECT option_id, text FROM other_option " +
             "WHERE option_id = $1 AND translation_id = $2",
             [otherOptionId, translationId],
           );
-          if (!option.rowCount) {
+          if (!option.rowCount || option.rows[0].text !== rendering) {
             await client.query("ROLLBACK");
             res.status(400).json({ error: "lemmaDefault option does not belong to this translation" });
             return;
