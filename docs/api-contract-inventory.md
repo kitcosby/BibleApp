@@ -71,6 +71,8 @@ The existing Flask `user_accounts` table and Flask session remain the sole accou
 3. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
 4. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
 
+**Client-integration status:** the current PWA still calls only the public, read-only Flask corpus endpoints (books, chapters, verses, word, search). It does not yet call the Express translation-authoring endpoints or the new token exchange. The token exchange and Express authorization are staged backend contracts; do not imply that the PWA account UI or authoring workflow is already wired to them. Client integration should follow a separate UI/API contract review.
+
 Express marks every `/api/bible/*` response `Cache-Control: private, no-store`. The PWA service-worker hardening in [BibleApp-pwa PR #2](https://github.com/kitcosby/BibleApp-pwa/pull/2) bypasses the shared API cache for session/auth routes, bearer-authenticated requests, and the private Bible API; it also refuses to cache `no-store` responses and removes the old cache versions. This is required to prevent cross-account response reuse on a shared device.
 5. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
 
