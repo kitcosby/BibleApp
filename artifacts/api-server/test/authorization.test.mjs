@@ -15,6 +15,10 @@ const [{ default: bibleRouter }, { requireUserIdentity }, { pool }] = await Prom
 
 const app = express();
 app.use(express.json());
+app.use("/api/bible", (_req, res, next) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  next();
+});
 app.use("/api/bible", requireUserIdentity);
 app.use("/api", bibleRouter);
 
