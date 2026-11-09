@@ -68,13 +68,14 @@ The exact JSON response shapes are defined by the current TypeScript handlers. B
 
 The existing Flask `user_accounts` table and Flask session remain the sole account authority. Once a user is authenticated in Flask, the browser can obtain a short-lived API token:
 
-1. The browser calls `GET /bible/api/auth/csrf` using `credentials: "include"`. Flask returns the session-bound CSRF token and requires an active account.
-2. The browser sends `POST /bible/api/auth/token` with `credentials: "include"` and `X-CSRF-Token`. Flask verifies the session, active account, CSRF token, and allowed Origin.
-3. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
-4. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
-5. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
+1. The browser calls `GET /bible/api/auth/bootstrap` using `credentials: "include"`. Flask creates or resumes a pre-authentication session and returns a session-bound CSRF token; it also reports whether an active account is already signed in.
+2. The browser sends `POST /bible/api/auth/login` or `/signup` with `credentials: "include"`, JSON credentials, and `X-CSRF-Token`. Flask validates CSRF and exact Origin, authenticates or creates the existing `user_accounts` account, rotates the session, and returns a fresh CSRF token. `POST /bible/api/auth/logout` clears the session and rotates the pre-authentication CSRF token.
+3. The browser sends `POST /bible/api/auth/token` with `credentials: "include"` and `X-CSRF-Token`. Flask verifies the authenticated session, active account, CSRF token, and allowed Origin.
+4. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
+5. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
+6. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
 
-**Client-integration status:** the PWA account-authentication PR stages the Account view, pre-auth CSRF bootstrap, JSON login/signup/logout, and in-memory Flask-to-Express token exchange. That PR is not yet merged. The PWA still does not create/select translations or call Express authoring routes; existing rendering choices remain localStorage-only. Do not imply that account-backed authoring or synchronization is complete.
+**Client-integration status:** PWA PR #3 stages the Account view, pre-auth CSRF bootstrap, JSON login/signup/logout, and in-memory Flask-to-Express token exchange. Dependent PWA PR #4 stages translation creation/selection and Hebrew per-word choice synchronization through the Express authoring routes. Both remain drafts. Existing browser-local choices are preserved and are not automatically imported; Greek word-choice persistence remains open. Browser end-to-end verification against configured staging services is still required.
 
 Express marks every `/api/bible/*` response `Cache-Control: private, no-store`. The PWA service-worker hardening in [BibleApp-pwa PR #2](https://github.com/kitcosby/BibleApp-pwa/pull/2) bypasses the shared API cache for session/auth routes, bearer-authenticated requests, and the private Bible API; it also refuses to cache `no-store` responses and removes the old cache versions. This is required to prevent cross-account response reuse on a shared device.
 
