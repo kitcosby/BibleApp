@@ -103,6 +103,7 @@ The following read endpoints are currently consumed by the existing BibleApp PWA
 | `GET /bible/api/verse/:book/:chapter/:verse` | Verse payload | Core |
 | `GET /bible/api/chapter/:book/:chapter` | Chapter payload | Core |
 | `GET /bible/api/word/:strongs` | Word/Strong's lookup | Core |
+| `GET /bible/api/word-options?wordIds=...` | Bounded phrase-option and lemma-key lookup for 1–100 Hebrew word IDs | Core; public read-only; `Cache-Control: no-store` because option order defines persisted choice bytes |
 | `GET /bible/api/search` | Existing search | Core; redesign intentionally deferred |
 
 The current Flask API returns public read-only corpus data and was observed setting `Access-Control-Allow-Origin: *`. Its search path currently calls local Ollama `nomic-embed-text` to embed the query and searches the existing YLT verse embedding store. This is a temporary legacy dependency pending the separate word-variant embedding rebuild and an explicit search redesign.
