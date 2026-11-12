@@ -46,9 +46,11 @@ The router-level middleware in `routes/index.ts` means that **all** `/api/bible/
 | `GET /api/healthz` | Process health | Public liveness only | No database details or credentials |
 | `GET /api/bible/healthz` | Checks legacy authoring DB pool with `SELECT 1` | Flask-issued bearer identity | Authenticated DB health check; prefer the public process liveness route for probes |
 | `GET /api/bible/translations` | Lists built-in and caller-owned translation metadata | Flask-issued bearer identity | Filters by verified account ID; built-ins are matched by ID and name |
+| `POST /api/bible/translations` | Creates a private translation | Flask-issued bearer identity | Server assigns `owner_id` from verified identity; satisfies the legacy `translation.user_id` FK using the legacy `app_user` row |
+| `GET /api/bible/translations/:translationId/choices?wordIds=...` | Returns explicit stored choice bytes for 1–100 requested Hebrew word IDs | Flask-issued bearer identity plus owner/built-in check | Queries only requested IDs; lemma defaults and Other options remain in translation detail |
 | `GET /api/bible/translations/:translationId` | Translation metadata, other options, selected word count, lemma defaults | Flask-issued bearer identity | Authorizes the parent translation before reading child rows |
-| `PUT /api/bible/translations/:translationId/choices/:wordId` | Upserts or deletes a word choice; updates translation timestamp | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; word ID bounded to the canonical corpus range |
-| `POST /api/bible/translations/:translationId/options` | Inserts an alternate rendering option | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; row lock serializes option index allocation |
+| `PUT /api/bible/translations/:translationId/choices/:wordId` | Upserts or deletes a word choice; optionally upserts its forward-only lemma default in the same transaction | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; validates word ID, lemma key, source, from-word ID, and Other-option ownership |
+| `POST /api/bible/translations/:translationId/options` | Adds an alternate rendering option or returns an existing duplicate | Flask-issued bearer identity plus owner row lock | Denies built-ins and non-owner writes; deduplicates exact text, caps at 230 options, and serializes index allocation |
 
 ### Hebrew vowel-variant endpoints
 
@@ -66,13 +68,14 @@ The exact JSON response shapes are defined by the current TypeScript handlers. B
 
 The existing Flask `user_accounts` table and Flask session remain the sole account authority. Once a user is authenticated in Flask, the browser can obtain a short-lived API token:
 
-1. The browser calls `GET /bible/api/auth/csrf` using `credentials: "include"`. Flask returns the session-bound CSRF token and requires an active account.
-2. The browser sends `POST /bible/api/auth/token` with `credentials: "include"` and `X-CSRF-Token`. Flask verifies the session, active account, CSRF token, and allowed Origin.
-3. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
-4. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
-5. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
+1. The browser calls `GET /bible/api/auth/bootstrap` using `credentials: "include"`. Flask creates or resumes a pre-authentication session and returns a session-bound CSRF token; it also reports whether an active account is already signed in.
+2. The browser sends `POST /bible/api/auth/login` or `/signup` with `credentials: "include"`, JSON credentials, and `X-CSRF-Token`. Flask validates CSRF and exact Origin, authenticates or creates the existing `user_accounts` account, rotates the session, and returns a fresh CSRF token. `POST /bible/api/auth/logout` clears the session and rotates the pre-authentication CSRF token.
+3. The browser sends `POST /bible/api/auth/token` with `credentials: "include"` and `X-CSRF-Token`. Flask verifies the authenticated session, active account, CSRF token, and allowed Origin.
+4. Flask signs an HS256 JWT with issuer `bibleapp-flask`, audience `bibleapp-api`, numeric account ID in `sub`, `iat`, `exp` (five minutes), and random `jti`.
+5. The browser keeps the returned bearer token in memory and sends `Authorization: Bearer ...` to the Express `/api/bible/*` routes. It must not persist the token in localStorage, sessionStorage, URLs, or logs.
+6. Express verifies signature with constant-time comparison, issuer, audience, subject, issuance/expiry bounds, and maximum five-minute lifetime. It uses only the verified `sub` as the owner identity.
 
-**Client-integration status:** the current PWA still calls only the public, read-only Flask corpus endpoints (books, chapters, verses, word, search). It does not yet call the Express translation-authoring endpoints or the new token exchange. The token exchange and Express authorization are staged backend contracts; do not imply that the PWA account UI or authoring workflow is already wired to them. Client integration should follow a separate UI/API contract review.
+**Client-integration status:** PWA PR #3 stages the Account view, pre-auth CSRF bootstrap, JSON login/signup/logout, and in-memory Flask-to-Express token exchange. Dependent PWA PR #4 stages translation creation/selection and Hebrew per-word choice synchronization through the Express authoring routes. Both remain drafts. Existing browser-local choices are preserved and are not automatically imported; Greek word-choice persistence remains open. Browser end-to-end verification against configured staging services is still required.
 
 Express marks every `/api/bible/*` response `Cache-Control: private, no-store`. The PWA service-worker hardening in [BibleApp-pwa PR #2](https://github.com/kitcosby/BibleApp-pwa/pull/2) bypasses the shared API cache for session/auth routes, bearer-authenticated requests, and the private Bible API; it also refuses to cache `no-store` responses and removes the old cache versions. This is required to prevent cross-account response reuse on a shared device.
 
@@ -84,7 +87,7 @@ Required environment configuration (values are secrets and must never be committ
 
 The token is not immediately revocable after logout or account deactivation; the residual exposure window is at most five minutes. Do not call this server-side session revocation. A later revocation/introspection design may be needed for higher-risk operations.
 
-The API identity token does not replace the separate Hebrew-variant sandbox token yet. That route family remains internal-only. This staged work does not add translation creation to Express or make Express's numeric choice operation behaviorally equivalent to Flask's dropdown/Other-option/lemma-default behavior. Those contract gaps remain open.
+The API identity token does not replace the separate Hebrew-variant sandbox token yet. That route family remains internal-only. The current Express authoring PR adds translation creation, explicit-choice retrieval, and transactional lemma-default writes. It still does not itself reconstruct the Flask dropdown list: the client must preserve the exact KJV-then-Young's-then-Other ordering, with the current occurrence's phrase first in each phrase group. The current numeric choice API is therefore not behaviorally equivalent until the PWA's option-building and selection logic is implemented and tested against Flask. Greek word-choice persistence is also not supported by the existing 264,217-row Hebrew `word_choice` key space.
 
 ## 2. Existing Lampy Flask corpus API
 
@@ -100,6 +103,7 @@ The following read endpoints are currently consumed by the existing BibleApp PWA
 | `GET /bible/api/verse/:book/:chapter/:verse` | Verse payload | Core |
 | `GET /bible/api/chapter/:book/:chapter` | Chapter payload | Core |
 | `GET /bible/api/word/:strongs` | Word/Strong's lookup | Core |
+| `GET /bible/api/word-options?wordIds=...` | Bounded phrase-option and lemma-key lookup for 1–100 Hebrew word IDs | Core; public read-only; `Cache-Control: no-store` because option order defines persisted choice bytes |
 | `GET /bible/api/search` | Existing search | Core; redesign intentionally deferred |
 
 The current Flask API returns public read-only corpus data and was observed setting `Access-Control-Allow-Origin: *`. Its search path currently calls local Ollama `nomic-embed-text` to embed the query and searches the existing YLT verse embedding store. This is a temporary legacy dependency pending the separate word-variant embedding rebuild and an explicit search redesign.
