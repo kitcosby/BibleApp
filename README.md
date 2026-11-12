@@ -1,8 +1,8 @@
 # BibleApp
 
-BibleApp is a private pnpm workspace containing the Bible application development workspace, a small Express API service, shared API/database packages, and separate frontend prototype artifacts.
+BibleApp is a pnpm workspace containing the Bible application development workspace, a small Express API service, shared API/database packages, and separate frontend prototype artifacts.
 
-> **Current implementation status:** this repository is still scaffold-stage. The checked-in API currently exposes a health endpoint only, the Drizzle schema has no application tables, and the `build-your-translation` frontend still displays a placeholder screen. This README documents what is present in the repository; it does not imply that a complete translation workflow or production deployment is operational.
+> **Current implementation status:** the checked-in API exposes a health endpoint, translation-authoring routes, and the Hebrew vowel-variant routes. The vowel-variant routes were verified live on Lampy against the isolated shadow database on 2026-11-12 (45 of 45 checks passed; see `docs/verification/2026-11-12-shadow-api/`). The Drizzle schema still has no application tables, and the `build-your-translation` frontend remains a prototype. This README documents what is present in the repository and what has been verified in deployment; it does not imply that a complete translation workflow is operational.
 
 ## Repository role
 
@@ -14,7 +14,7 @@ The root `pnpm-workspace.yaml` includes `artifacts/*`, `lib/*`, `lib/integration
 
 | Path | Role | Current notes |
 |---|---|---|
-| `artifacts/api-server/` | Express API service | Express 5; mounts routes under `/api`; currently registers `GET /api/healthz` only. |
+| `artifacts/api-server/` | Express API service | Express 5; mounts routes under `/api`: health (`GET /api/healthz`), translation-authoring routes under `/api/bible`, and Hebrew vowel-variant routes under `/api/lexicon/hebrew-vowel-variants`. |
 | `artifacts/build-your-translation/` | Translation-app frontend artifact | React, Vite, Wouter, TanStack Query and shared UI components; current home route is a placeholder. |
 | `artifacts/mockup-sandbox/` | Separate UI/mockup sandbox | Independent Vite artifact; do not treat it as the deployed application without deployment evidence. |
 | `lib/api-spec/` | API contract source | OpenAPI 3.1 document and Orval configuration. |
@@ -59,7 +59,7 @@ The workspace's `replit.md` also documents `DATABASE_URL` and a Drizzle schema p
 
 - The OpenAPI source of truth is `lib/api-spec/openapi.yaml`.
 - API routes are mounted under `/api` in `artifacts/api-server/src/app.ts`.
-- The currently registered route is `GET /api/healthz`; it returns a schema-validated health status.
+- The registered routes are `GET /api/healthz` (schema-validated health status), the translation-authoring routes under `/api/bible`, and the Hebrew vowel-variant routes under `/api/lexicon/hebrew-vowel-variants` (sandbox-token protected; read-only against the shadow database). The full inventory is in `docs/api-contract-inventory.md`.
 - Generated API client and Zod files should be regenerated from the OpenAPI source rather than edited manually.
 - Drizzle tables belong under `lib/db/src/schema/` and should be exported through the schema index.
 - The current schema index contains only scaffolding comments and no application tables. Do not infer a live BibleApp data model from the package dependencies alone.
@@ -74,11 +74,12 @@ The workspace's `replit.md` also documents `DATABASE_URL` and a Drizzle schema p
 ## Not yet established by this repository inspection
 
 - Production hosting, domain routing, and deployment automation for this workspace.
-- Whether the API server is deployed or connected to the Lampy Bible service.
 - A complete authentication, authorization, translation editing, publishing, or synchronization workflow.
 - A production PostgreSQL schema for BibleApp.
 
 Verify these from deployment configuration and the running environment before documenting them as operational.
+
+Established by deployment inspection (2026-11-12): the API server is deployed on Lampy under Supervisor (`bible-app-api`, port 8799) from a checkout of this repository, and the Hebrew vowel-variant routes serve the isolated shadow database `bible_hebrew_variant_shadow_20261107` through a read-only, production-fenced login. The deployed checkout can lag `main`; the dated verification record is in `docs/verification/2026-11-12-shadow-api/`.
 
 ## Related repositories
 
