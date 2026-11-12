@@ -1,0 +1,324 @@
+{
+ "summary": {
+  "total": 45,
+  "pass": 45,
+  "fail": 0
+ },
+ "results": [
+  {
+   "id": "A1",
+   "cat": "auth",
+   "desc": "no token -> 403 Sandbox authorization required",
+   "status": "PASS",
+   "detail": "403 {'error': 'Sandbox authorization required'}"
+  },
+  {
+   "id": "A2",
+   "cat": "auth",
+   "desc": "wrong token -> 403",
+   "status": "PASS",
+   "detail": "403 {'error': 'Sandbox authorization required'}"
+  },
+  {
+   "id": "A3",
+   "cat": "auth",
+   "desc": "Bearer header (valid token, wrong mechanism) -> 403",
+   "status": "PASS",
+   "detail": "403"
+  },
+  {
+   "id": "A4",
+   "cat": "auth",
+   "desc": "no token on group route -> 403",
+   "status": "PASS",
+   "detail": "403"
+  },
+  {
+   "id": "A5",
+   "cat": "auth",
+   "desc": "no token on occurrences route -> 403",
+   "status": "PASS",
+   "detail": "403"
+  },
+  {
+   "id": "A6",
+   "cat": "auth",
+   "desc": "valid x-sandbox-token -> 200",
+   "status": "PASS",
+   "detail": "200"
+  },
+  {
+   "id": "R1",
+   "cat": "regression",
+   "desc": "by-word/238432 -> group 504",
+   "status": "PASS",
+   "detail": "200 {'group': {'id': 504, 'language': 'hebrew', 'relation': 'vowel-only-orthographic-variant', 'dataset': {'algorithmVersion': 'nfc-remove-u05b0-u05bb-u05c7-v1', 'normalizationForm': 'NFC', 'sourceSnapshotId': 'sha256:2ea0a1b12a4335d11393c1baddd1d0e0327f67f70059973f82f52c9bb557a540', 'validation': 'runtime-invariants-passed'}}}"
+  },
+  {
+   "id": "R2",
+   "cat": "regression",
+   "desc": "group 504 members == {(6627,4,11),(21384,3,1)}",
+   "status": "PASS",
+   "detail": "200 [(6627, 4, 11), (21384, 3, 1)]"
+  },
+  {
+   "id": "R3",
+   "cat": "regression",
+   "desc": "group 504 member (6627,4,11) occurrences == DB set",
+   "status": "PASS",
+   "detail": "api [213637, 215100] db [213637, 215100]"
+  },
+  {
+   "id": "R4",
+   "cat": "regression",
+   "desc": "Ezekiel 27:32 associations 181/504/2659/2177",
+   "status": "PASS",
+   "detail": "all match"
+  },
+  {
+   "id": "R5",
+   "cat": "regression",
+   "desc": "Ezekiel 27:32 non-variant words -> group null",
+   "status": "PASS",
+   "detail": "all null"
+  },
+  {
+   "id": "F1",
+   "cat": "functional",
+   "desc": "60 sampled grouped words: API group == DB group",
+   "status": "PASS",
+   "detail": "60/60 match"
+  },
+  {
+   "id": "F2",
+   "cat": "functional",
+   "desc": "60 sampled ungrouped words: API group null",
+   "status": "PASS",
+   "detail": "60/60 null"
+  },
+  {
+   "id": "F3",
+   "cat": "functional",
+   "desc": "15 sampled Aramaic words: group + language=aramaic",
+   "status": "PASS",
+   "detail": "15 sampled of 124"
+  },
+  {
+   "id": "F4",
+   "cat": "functional",
+   "desc": "ambiguous keys (root 2752): Hebrew words resolve to Hebrew group",
+   "status": "PASS",
+   "detail": "235/1047/1040 as expected"
+  },
+  {
+   "id": "F5",
+   "cat": "functional",
+   "desc": "25 sampled groups: member sets + occurrenceCounts == DB",
+   "status": "PASS",
+   "detail": "25/25 exact"
+  },
+  {
+   "id": "F6",
+   "cat": "functional",
+   "desc": "cursor walk of largest member (group 302, 924 occ, 10 pages): set == DB, no dupes",
+   "status": "PASS",
+   "detail": "api 924 db 924"
+  },
+  {
+   "id": "F7",
+   "cat": "functional",
+   "desc": "occurrence verse/position/pointed fields == DB (member 504/(21384,3,1))",
+   "status": "PASS",
+   "detail": "all fields match"
+  },
+  {
+   "id": "N1",
+   "cat": "negative",
+   "desc": "by-word/0 -> 400 Invalid wordId",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid wordId'}"
+  },
+  {
+   "id": "N2",
+   "cat": "negative",
+   "desc": "by-word/-1 -> 400",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid wordId'}"
+  },
+  {
+   "id": "N3",
+   "cat": "negative",
+   "desc": "by-word/abc -> 400",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid wordId'}"
+  },
+  {
+   "id": "N4",
+   "cat": "negative",
+   "desc": "by-word/264218 (nonexistent) -> 404 Source word not found",
+   "status": "PASS",
+   "detail": "404 {'error': 'Source word not found'}"
+  },
+  {
+   "id": "N5",
+   "cat": "negative",
+   "desc": "by-word/99999999999999999999 (overflow) -> 400, no 500",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid wordId'}"
+  },
+  {
+   "id": "N6",
+   "cat": "negative",
+   "desc": "by-word/000238432 (leading zeros) -> 400",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid wordId'}"
+  },
+  {
+   "id": "N7",
+   "cat": "negative",
+   "desc": "group/0 -> 400 Invalid variantGroupId",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid variantGroupId'}"
+  },
+  {
+   "id": "N8",
+   "cat": "negative",
+   "desc": "group/3350 (nonexistent) -> 404 Variant group not found",
+   "status": "PASS",
+   "detail": "404 {'error': 'Variant group not found'}"
+  },
+  {
+   "id": "N9",
+   "cat": "negative",
+   "desc": "group/abc -> 400",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid variantGroupId'}"
+  },
+  {
+   "id": "N10",
+   "cat": "negative",
+   "desc": "occurrences for member not in group 504 -> 404",
+   "status": "PASS",
+   "detail": "404 {'error': 'Variant group or member not found'}"
+  },
+  {
+   "id": "N11",
+   "cat": "negative",
+   "desc": "occurrences limit=0 -> 400",
+   "status": "PASS",
+   "detail": "400 {'error': 'limit must be between 1 and 100'}"
+  },
+  {
+   "id": "N12",
+   "cat": "negative",
+   "desc": "occurrences limit=101 -> 400",
+   "status": "PASS",
+   "detail": "400 {'error': 'limit must be between 1 and 100'}"
+  },
+  {
+   "id": "N13",
+   "cat": "negative",
+   "desc": "occurrences limit=abc -> 400 Invalid limit",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid limit'}"
+  },
+  {
+   "id": "N14",
+   "cat": "negative",
+   "desc": "occurrences garbage cursor -> 400 Invalid cursor",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid cursor'}"
+  },
+  {
+   "id": "N15",
+   "cat": "negative",
+   "desc": "cursor minted for member A used on member B -> 400 Invalid cursor",
+   "status": "PASS",
+   "detail": "400 {'error': 'Invalid cursor'}"
+  },
+  {
+   "id": "N16",
+   "cat": "negative",
+   "desc": "bare route (no id) with token -> 404",
+   "status": "PASS",
+   "detail": "404 <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</tit"
+  },
+  {
+   "id": "N17",
+   "cat": "negative",
+   "desc": "by-word with extra path segment -> 404",
+   "status": "PASS",
+   "detail": "404 <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</tit"
+  },
+  {
+   "id": "N18",
+   "cat": "negative",
+   "desc": "unknown query param ignored -> 200 group 504",
+   "status": "PASS",
+   "detail": "200"
+  },
+  {
+   "id": "N19",
+   "cat": "negative",
+   "desc": "POST to by-word route -> not routed (404)",
+   "status": "PASS",
+   "detail": "404 <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8"
+  },
+  {
+   "id": "N20",
+   "cat": "negative",
+   "desc": "trailing slash on by-word -> record behavior",
+   "status": "PASS",
+   "detail": "status 200"
+  },
+  {
+   "id": "S1",
+   "cat": "structure",
+   "desc": "200 response Content-Type is JSON",
+   "status": "PASS",
+   "detail": "application/json; charset=utf-8"
+  },
+  {
+   "id": "S2",
+   "cat": "structure",
+   "desc": "group payload has id/language/relation/dataset with all dataset fields",
+   "status": "PASS",
+   "detail": ""
+  },
+  {
+   "id": "S3",
+   "cat": "structure",
+   "desc": "group response carries interpretiveLimit + members with pointedForm/root/rootForm",
+   "status": "PASS",
+   "detail": ""
+  },
+  {
+   "id": "S4",
+   "cat": "structure",
+   "desc": "error bodies are JSON {\"error\": ...}",
+   "status": "PASS",
+   "detail": "application/json; charset=utf-8 {'error': 'Invalid wordId'}"
+  },
+  {
+   "id": "I1",
+   "cat": "invariants",
+   "desc": "DB counts == API EXPECTED (3349/7148/7145/32676)",
+   "status": "PASS",
+   "detail": "3349/7148/7145/32676"
+  },
+  {
+   "id": "I2",
+   "cat": "invariants",
+   "desc": "dataset.validation == runtime-invariants-passed (live)",
+   "status": "PASS",
+   "detail": ""
+  },
+  {
+   "id": "I3",
+   "cat": "invariants",
+   "desc": "no (key, language) member assigned to multiple groups",
+   "status": "PASS",
+   "detail": "0"
+  }
+ ]
+}
